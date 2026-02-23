@@ -251,14 +251,9 @@
     return (Number(n) >= 0 ? '+' : '') + s + '%';
   }
 
+  // [근본 해결책] 모든 API 요청이 프록시를 통하도록 수정
   function fetchJson(url) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
-    return fetch(url, { signal: controller.signal }).then(r => {
-      if (!r.ok) throw new Error(r.status);
-      clearTimeout(timeoutId);
-      return r.json();
-    }).catch(e => { console.error(`Failed to fetch JSON from ${url}:`, e); throw e; });
+    return fetchProxy(url);
   }
 
   function getExchangeRate() {
