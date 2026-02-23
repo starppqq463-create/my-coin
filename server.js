@@ -35,6 +35,16 @@ app.all('/proxy', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+// 루트 경로('/') 접속 시 index.html 파일 전송 (Cannot GET / 오류 해결)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+// Vercel용 내보내기 및 로컬 실행 처리
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
