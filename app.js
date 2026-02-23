@@ -21,6 +21,7 @@
   const WHALE_THRESHOLD_USD = 2000; // 100만 달러 이상 감지
   const PROXY_CANDIDATES = [
     url => '/proxy?url=' + encodeURIComponent(url), // 1. 내 서버 (백엔드 구축 시 최우선 사용)
+    url => '/api/proxy?url=' + encodeURIComponent(url), // 1. Vercel API 경로 (기본값)
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),
     url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
     url => 'https://thingproxy.freeboard.io/fetch/' + url,
