@@ -31,6 +31,8 @@
   const POST_SUPPORTING_PROXIES = [
     PROXY_CANDIDATES[0], // 내 서버
     PROXY_CANDIDATES[1], // corsproxy.io
+    PROXY_CANDIDATES[0], // Vercel API
+    PROXY_CANDIDATES[1]  // corsproxy.io
   ];
 
   async function fetchProxy(url, options = {}) {
