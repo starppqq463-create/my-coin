@@ -1300,52 +1300,17 @@
   function load() {
     const tbody = $('#table-body');
 
-    // [해결책] Promise.all -> Promise.allSettled 로 변경
-    // 일부 API가 실패하더라도 전체가 중단되지 않고, 성공한 데이터만 표시하도록 수정
-    Promise.allSettled([
-      getExchangeRate(),
-      getUpbitMarkets(),
-      getBithumbTickers(),
-      getBinanceTickers(),
-      getBybitTickers(),
-      getOkxTickers(),
-      getBitgetTickers(),
-      getGateioTickers(),
-      getHyperliquidTickers(),
-      getBinanceFuturesTickers(),
-      getBybitFuturesTickers(),
-      getOkxFuturesTickers(),
-      getBitgetFuturesTickers(),
-      getGateioFuturesTickers()
-    ]).then((results) => {
-      // 각 API 요청 결과를 확인하고, 성공한 경우에만 값을 사용
-      const getValue = (result, defaultValue) => result.status === 'fulfilled' ? result.value : defaultValue;
-
-      const rate = getValue(results[0], krwPerUsd);
-      const markets = getValue(results[1], []);
-      const bithumbMap = getValue(results[2], {});
-      const binanceMap = getValue(results[3], {});
-      const bybitMap = getValue(results[4], {});
-      const okxMap = getValue(results[5], {});
-      const bitgetMap = getValue(results[6], {});
-      const gateMap = getValue(results[7], {});
-      const hyperliquidMap = getValue(results[8], {});
-      const binanceFuturesMap = getValue(results[9], {});
-      const bybitFuturesMap = getValue(results[10], {});
-      const okxFuturesMap = getValue(results[11], {});
-      const bitgetFuturesMap = getValue(results[12], {});
-      const gateioFuturesMap = getValue(results[13], {});
-
-      krwPerUsd = rate;
-      setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
-      const batch = buildMarketBatch(markets);
-      return getUpbitTickers(batch).then(upbitTickers => {
-        allRows = buildRows(upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap);
-        $$('.data-table th[data-sort]').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
-        const th = $(`.data-table th[data-sort="${sortKey}"]`);
-        if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
-        applySortAndFilter();
-      });
+    // [개선] 모든 데이터를 한 번에 가져오는 통합 API 호출
+    fetch('/api/data').then(res => res.json()).then(data => {
+      krwPerUsd = data.rate;
+      setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
+      
+      allRows = buildRows(data.upbitTickers, data.bithumbMap, data.binanceMap, data.bybitMap, data.okxMap, data.bitgetMap, data.gateMap, data.hyperliquidMap, data.binanceFuturesMap, data.bybitFuturesMap, data.okxFuturesMap, data.bitgetFuturesMap, data.gateioFuturesMap);
+      
+      $$('.data-table th[data-sort]').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+      const th = $(`.data-table th[data-sort="${sortKey}"]`);
+      if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+      applySortAndFilter();
     }).catch(err => {
       if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오지 못했습니다. 새로고침해 주세요.</td></tr>';
       setMeta(krwPerUsd, null);

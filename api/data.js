@@ -1,0 +1,209 @@
+const axios = require('axios');
+
+// URL 상수
+const UPBIT_TICKER_URL = 'https://api.upbit.com/v1/ticker?markets=';
+const UPBIT_MARKETS_URL = 'https://api.upbit.com/v1/market/all?isDetails=false';
+const BITHUMB_TICKER_URL = 'https://api.bithumb.com/public/ticker/ALL_KRW';
+const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+const BYBIT_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=spot';
+const OKX_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SPOT';
+const HYPERLIQUID_TICKER_URL = 'https://api.hyperliquid.xyz/info';
+const GATEIO_TICKER_URL = 'https://api.gateio.ws/api/v4/spot/tickers';
+const EXCHANGE_RATE_URL = 'https://api.manana.kr/exchange/rate/KRW/KRW,USD.json';
+const BINANCE_FUTURES_TICKER_URL = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
+const BYBIT_FUTURES_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=linear';
+const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
+const BINANCE_FUNDING_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';
+const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP';
+
+// 캐시 저장소 및 유효 시간
+const cache = { kimchi: null, funbi: null };
+const CACHE_TTL = 2000; // 2초
+
+// 서버 내에서 사용할 데이터 요청 함수
+async function fetchJson(url, options = {}) {
+    try {
+        const response = await axios({
+            method: options.method || 'GET',
+            url: url,
+            data: options.data,
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json' },
+            timeout: 8000
+        });
+        return response.data;
+    } catch (error) {
+        return null;
+    }
+}
+
+// 각 거래소 데이터 가져오는 함수들 (app.js에서 이동)
+async function getExchangeRate() {
+    const data = await fetchJson(EXCHANGE_RATE_URL);
+    const item = Array.isArray(data) ? data.find(d => d.name === 'USDKRW=X') : null;
+    return (item && item.rate) ? item.rate : 1350;
+}
+async function getUpbitMarkets() {
+    const markets = await fetchJson(UPBIT_MARKETS_URL);
+    return markets ? markets.filter(m => m.market.startsWith('KRW-')).map(m => m.market) : [];
+}
+async function getUpbitTickers(markets) {
+    if (!markets || !markets.length) return [];
+    return await fetchJson(UPBIT_TICKER_URL + markets.join(','));
+}
+async function getBithumbTickers() {
+    const res = await fetchJson(BITHUMB_TICKER_URL);
+    if (!res || !res.data) return {};
+    return Object.keys(res.data).reduce((acc, key) => {
+        if (key !== 'date') acc[key] = parseFloat(res.data[key].closing_price);
+        return acc;
+    }, {});
+}
+async function getBinanceTickers() {
+    const list = await fetchJson(BINANCE_TICKER_URL);
+    if (!list) return {};
+    return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
+        return acc;
+    }, {});
+}
+async function getBybitTickers() {
+    const res = await fetchJson(BYBIT_TICKER_URL);
+    if (!res || !res.result || !res.result.list) return {};
+    return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+        return acc;
+    }, {});
+}
+async function getOkxTickers() {
+    const res = await fetchJson(OKX_TICKER_URL);
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.instId.includes('-USDT')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT', '')] = parseFloat(t.last);
+        return acc;
+    }, {});
+}
+async function getHyperliquidTickers() {
+    const data = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', data: { type: 'metaAndAssetCtxs' } });
+    if (!Array.isArray(data) || data.length < 2 || !data[0].universe) return {};
+    const combined = {};
+    data[0].universe.forEach((u, i) => {
+        const ctx = data[1][i];
+        if (u.name && ctx) combined[u.name] = { spot: parseFloat(ctx.oraclePx), perp: parseFloat(ctx.markPx), funding: parseFloat(ctx.funding) };
+    });
+    return combined;
+}
+async function getGateioTickers() {
+    const list = await fetchJson(GATEIO_TICKER_URL);
+    if (!list) return {};
+    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
+        return acc;
+    }, {});
+}
+async function getBinanceFuturesTickers() {
+    const list = await fetchJson(BINANCE_FUTURES_TICKER_URL);
+    if (!list) return {};
+    return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+        return acc;
+    }, {});
+}
+async function getBybitFuturesTickers() {
+    const res = await fetchJson(BYBIT_FUTURES_TICKER_URL);
+    if (!res || !res.result || !res.result.list) return {};
+    return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate) };
+        return acc;
+    }, {});
+}
+async function getOkxFuturesTickers() {
+    const res = await fetchJson(OKX_FUTURES_TICKER_URL);
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT-SWAP', '')] = { price: parseFloat(t.last) };
+        return acc;
+    }, {});
+}
+async function getBitgetFuturesTickers() {
+    const res = await fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPr), funding: parseFloat(t.fundingRate) };
+        return acc;
+    }, {});
+}
+async function getGateioFuturesTickers() {
+    const list = await fetchJson('https://api.gateio.ws/api/v4/futures/usdt/tickers');
+    if (!list) return {};
+    return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.contract.replace('_USDT', '')] = { price: parseFloat(t.last), funding: parseFloat(t.funding_rate) };
+        return acc;
+    }, {});
+}
+async function getBitgetTickers() {
+    const res = await fetchJson('https://api.bitget.com/api/v2/spot/market/tickers');
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
+        return acc;
+    }, {});
+}
+
+// 메인 핸들러
+module.exports = async (req, res) => {
+    const now = Date.now();
+    // 캐시가 유효하면 캐시된 데이터 반환
+    if (cache.kimchi && (now - cache.kimchiTimestamp < CACHE_TTL)) {
+        res.setHeader('X-Vercel-Cache', 'HIT');
+        return res.status(200).json(cache.kimchi);
+    }
+
+    // 모든 데이터를 병렬로 요청
+    const results = await Promise.allSettled([
+        getExchangeRate(),
+        getUpbitMarkets(),
+        getBithumbTickers(),
+        getBinanceTickers(),
+        getBybitTickers(),
+        getOkxTickers(),
+        getBitgetTickers(),
+        getGateioTickers(),
+        getHyperliquidTickers(),
+        getBinanceFuturesTickers(),
+        getBybitFuturesTickers(),
+        getOkxFuturesTickers(),
+        getBitgetFuturesTickers(),
+        getGateioFuturesTickers()
+    ]);
+
+    const getValue = (result, defaultValue) => result.status === 'fulfilled' ? result.value : defaultValue;
+
+    // 업비트 마켓 목록을 먼저 가져와야 함
+    const upbitMarkets = getValue(results[1], []);
+    const upbitTickersResult = await Promise.allSettled([getUpbitTickers(upbitMarkets)]);
+
+    // 최종 데이터 취합
+    const allData = {
+        rate: getValue(results[0], 1350),
+        upbitTickers: getValue(upbitTickersResult[0], []),
+        bithumbMap: getValue(results[2], {}),
+        binanceMap: getValue(results[3], {}),
+        bybitMap: getValue(results[4], {}),
+        okxMap: getValue(results[5], {}),
+        bitgetMap: getValue(results[6], {}),
+        gateMap: getValue(results[7], {}),
+        hyperliquidMap: getValue(results[8], {}),
+        binanceFuturesMap: getValue(results[9], {}),
+        bybitFuturesMap: getValue(results[10], {}),
+        okxFuturesMap: getValue(results[11], {}),
+        bitgetFuturesMap: getValue(results[12], {}),
+        gateioFuturesMap: getValue(results[13], {}),
+    };
+
+    // 캐시에 저장
+    cache.kimchi = allData;
+    cache.kimchiTimestamp = now;
+
+    res.setHeader('X-Vercel-Cache', 'MISS');
+    res.status(200).json(allData);
+};
