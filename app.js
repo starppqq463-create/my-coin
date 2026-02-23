@@ -28,12 +28,13 @@
   ];
   // POST 요청을 지원하는 프록시 목록
   const POST_SUPPORTING_PROXIES = [
-    PROXY_CANDIDATES[0] // Vercel API
+    PROXY_CANDIDATES[0], // Vercel API
+    PROXY_CANDIDATES[1]  // corsproxy.io (백업)
   ];
 
   async function fetchProxy(url, options = {}) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20초 타임아웃
+    const timeoutId = setTimeout(() => controller.abort(), 9000); // 9초 타임아웃 (Vercel 제한 10초보다 짧게)
 
     // POST 요청은 현재 corsproxy.io에만 의존합니다.
     // 이 단일 의존성이 간헐적 실패의 원인이므로, 아래 getHyperliquidTickers 함수에서
