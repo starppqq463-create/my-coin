@@ -1304,7 +1304,9 @@
   function load() {
     const tbody = $('#table-body');
 
-    Promise.all([
+    // [해결책] Promise.all -> Promise.allSettled 로 변경
+    // 일부 API가 실패하더라도 전체가 중단되지 않고, 성공한 데이터만 표시하도록 수정
+    Promise.allSettled([
       getExchangeRate(),
       getUpbitMarkets(),
       getBithumbTickers(),
@@ -1319,7 +1321,25 @@
       getOkxFuturesTickers(),
       getBitgetFuturesTickers(),
       getGateioFuturesTickers()
-    ]).then(([rate, markets, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap]) => {
+    ]).then((results) => {
+      // 각 API 요청 결과를 확인하고, 성공한 경우에만 값을 사용
+      const getValue = (result, defaultValue) => result.status === 'fulfilled' ? result.value : defaultValue;
+
+      const rate = getValue(results[0], krwPerUsd);
+      const markets = getValue(results[1], []);
+      const bithumbMap = getValue(results[2], {});
+      const binanceMap = getValue(results[3], {});
+      const bybitMap = getValue(results[4], {});
+      const okxMap = getValue(results[5], {});
+      const bitgetMap = getValue(results[6], {});
+      const gateMap = getValue(results[7], {});
+      const hyperliquidMap = getValue(results[8], {});
+      const binanceFuturesMap = getValue(results[9], {});
+      const bybitFuturesMap = getValue(results[10], {});
+      const okxFuturesMap = getValue(results[11], {});
+      const bitgetFuturesMap = getValue(results[12], {});
+      const gateioFuturesMap = getValue(results[13], {});
+
       krwPerUsd = rate;
       setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
       const batch = buildMarketBatch(markets);
