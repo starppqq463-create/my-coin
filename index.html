@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>김치프리미엄 · 펀비 비교 | 국내·해외 거래소 가격 비교</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-main: #121212;
+      --bg-card: #121212;
+      --bg-hover: #1e2329;
+      --text-primary: #eaecef;
+      --text-secondary: #848e9c;
+      --border-color: #2b3139;
+      --up-color: #c84a31; /* 업비트 상승색 */
+      --down-color: #1261c4; /* 업비트 하락색 */
+      --premium-high-bg: transparent;
+    }
+
+    :root.light-theme {
+      color-scheme: light;
+      --bg-main: #f5f7fb;
+      --bg-card: #ffffff;
+      --bg-hover: #f0f3f8;
+      --text-primary: #0f172a;
+      --text-secondary: #6b7280;
+      --border-color: #e5e7eb;
+      --up-color: #16a34a; /* Green for up */
+      --down-color: #dc2626; /* Red for down */
+    }
+    .light-theme .logo { color: #0f172a; }
+    .light-theme .search-input { background: #f9fafb; color: #0f172a; border-color: #d1d5db; }
+    .light-theme .btn-refresh, .light-theme #btn-theme-toggle { background: #fff; border-color: #d1d5db; color: #374151; }
+    .light-theme .btn-refresh:hover, .light-theme #btn-theme-toggle:hover { background: #f9fafb; }
+    .light-theme footer p { color: #6b7280; }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: 14px;
+      margin: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* 헤더 & 툴바 */
+    .header { padding: 16px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 16px; }
+    .logo { font-size: 18px; font-weight: 700; margin: 0; color: #fff; }
+    .tagline { font-size: 14px; color: var(--text-secondary); margin: 4px 0 0; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+    .search-input {
+      background: var(--bg-card); border: 1px solid var(--border-color); color: #fff;
+      padding: 8px 12px; border-radius: 4px; font-size: 14px; width: 200px;
+    }
+    .search-input:focus { border-color: #f0b90b; outline: none; }
+    
+    .meta { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 12px; }
+    .btn-refresh {
+      background: var(--bg-hover); border: 1px solid var(--border-color); color: var(--text-primary);
+      padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    .btn-refresh:hover { background: #2b3139; }
+
+    .top-bar {
+      padding: 10px 0 0;
+    }
+    .top-bar .container {
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* 탭 */
+    .tabs { display: flex; gap: 10px; border-bottom: none; margin-bottom: 20px; }
+    .tab {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 8px 18px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      position: relative;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .tab.active { color: var(--text-primary); font-weight: 700; background: var(--bg-hover); border-color: #f0b90b; box-shadow: 0 0 8px rgba(240, 185, 11, 0.2); }
+
+    /* 섹션 전환 (필수) */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* 테이블 */
+    .table-wrap { overflow-x: auto; background: var(--bg-card); border-radius: 0; border: none; max-height: 75vh; overflow-y: auto; }
+    .data-table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    
+    .data-table th {
+      background: var(--bg-card); color: var(--text-secondary); font-weight: 600;
+      padding: 14px 10px; text-align: right; font-size: 16px; position: sticky; top: 0; z-index: 10;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .data-table th:first-child { text-align: left; padding-left: 18px; position: sticky; left: 0; z-index: 20; }
+    .data-table th[data-sort] { cursor: pointer; user-select: none; }
+    .data-table th[data-sort]:hover { color: var(--text-primary); }
+
+    .data-table td {
+      padding: 10px 10px; border-bottom: 1px solid var(--border-color);
+      font-family: 'Roboto Mono', monospace; /* 숫자 가독성 */
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    .data-table tr:hover { background-color: var(--bg-hover); }
+    /* 체스판 무늬 강제 제거 */
+    .data-table tr:nth-child(even), .data-table tr:nth-child(odd) { background-color: transparent !important; }
+    
+    .data-table tr:last-child td { border-bottom: none; }
+
+    /* 코인 이름 셀 */
+    .data-table td.name { 
+      text-align: left; padding-left: 18px; display: flex; align-items: center; gap: 12px; font-family: 'Noto Sans KR', sans-serif;
+      position: sticky; left: 0; z-index: 5; background-color: var(--bg-card);
+    }
+    .data-table tr:hover td.name { background-color: var(--bg-hover); }
+    .coin-icon { width: 24px; height: 24px; border-radius: 50%; background-color: #fff; }
+    .coin-name { font-weight: 700; font-size: 15px; color: var(--text-primary); display: block; }
+    .exchange-icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: -2px;
+      margin-right: 5px;
+      border-radius: 3px;
+    }
+    .coin-korean-name { font-size: 13px; color: var(--text-secondary); }
+
+    /* 데이터 컬러링 */
+    .text-right { text-align: right; }
+    .sub-price { font-size: 12px; color: #5e6673; margin-left: 4px; }
+    .positive { color: var(--up-color); }
+    .negative { color: var(--down-color); }
+    .premium-high { color: var(--up-color); }
+    .premium-low { color: var(--down-color); }
+    .premium-val {
+      font-size: 12px;
+      font-family: 'Roboto Mono', monospace;
+      display: block;
+    }
+    .funding-timer { font-size: 11px; color: #f0b90b; display: block; margin-top: 4px; font-weight: normal; font-family: 'Roboto Mono', monospace; }
+
+    /* 달러 가격 숨기기 */
+    .data-table.hide-usd .sub-price { display: none; }
+    
+    /* 김프 5% 이상 강조 */
+    .premium-alert {
+      background-color: transparent !important;
+    }
+
+    /* 모바일 최적화 */
+    @media (max-width: 768px) {
+      .data-table th, .data-table td { padding: 8px 4px; font-size: 11px; }
+      .coin-korean-name { display: none; } /* 모바일에서 한글명 숨김 */
+      .sub-price, .premium-val { display: block; margin-left: 0; margin-top: 2px; } /* 모바일에서 달러/김프 줄바꿈 */
+    }
+
+    /* 새 데이터 강조 애니메이션 */
+    @keyframes flash {
+      0% { background-color: rgba(240, 185, 11, 0.3); }
+      100% { background-color: transparent; }
+    }
+    .new-row { animation: flash 1s ease-out; }
+
+    /* 페이지네이션 */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin-top: 16px;
+      padding: 10px 0;
+    }
+    .btn-page {
+      padding: 6px 14px; border-radius: 4px; border: 1px solid var(--border-color);
+      background: var(--bg-card); color: var(--text-primary); cursor: pointer; font-size: 14px;
+    }
+    .btn-page:hover { background: var(--bg-hover); border-color: #f0b90b; }
+    .page-info { font-size: 15px; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; }
+
+    /* 연결 상태 표시 */
+    .whale-status-bar {
+      font-size: 13px; color: var(--text-secondary); margin-top: 8px; display: flex; gap: 10px; align-items: center;
+    }
+    .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #555; margin-right: 4px; }
+    .status-dot.on { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+    .status-dot.off { background: #ef4444; }
+
+    /* 거래소 필터 체크박스 */
+    .exchange-filter label {
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .exchange-filter input {
+      cursor: pointer;
+    }
+
+    .exchange-filter {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .exchange-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .exchange-filter-group > strong {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      min-width: 80px;
+      text-align: right;
+    }
+    .checkbox-wrapper { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+
+    /* 컬럼 숨기기 */
+    .data-table.hide-upbit .col-upbit, .data-table.hide-bithumb .col-bithumb, .data-table.hide-binance .col-binance, .data-table.hide-binance_perp .col-binance_perp, .data-table.hide-bybit .col-bybit, .data-table.hide-bybit_perp .col-bybit_perp, .data-table.hide-okx .col-okx, .data-table.hide-okx_perp .col-okx_perp, .data-table.hide-bitget .col-bitget, .data-table.hide-bitget_perp .col-bitget_perp, .data-table.hide-gate .col-gate, .data-table.hide-gate_perp .col-gate_perp, .data-table.hide-hyperliquid_spot .col-hyperliquid_spot, .data-table.hide-hyperliquid_perp .col-hyperliquid_perp, .data-table.hide-hyperliquid .col-hyperliquid { display: none; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="container">
+      <!-- Theme toggle button will be appended here -->
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <div class="container">
+      <button type="button" class="tab active" data-tab="kimchi">김치 프리미엄</button>
+      <button type="button" class="tab" data-tab="funbi">펀비 비교</button>
+      <button type="button" class="tab" data-tab="whale">고래 추적</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="container">
+      <!-- 김치 프리미엄 섹션 -->
+      <section id="section-kimchi" class="section active">
+        <div class="section-header">
+          <h2>김치 프리미엄</h2>
+          <p>국내·해외 여러 거래소 가격을 한 번에 비교</p>
+        </div>
+        <div class="toolbar">
+          <div class="search-wrap">
+            <input type="text" id="search" class="search-input" placeholder="코인 검색..." autocomplete="off">
+          </div>
+          <div class="meta">
+            <span id="exchange-rate">환율: 로딩 중...</span>
+            <span id="last-update">마지막 갱신: -</span>
+            <button type="button" id="btn-refresh" class="btn-refresh">새로고침</button>
+          </div>
+        </div>
+        <div class="toolbar" style="margin-top: -4px; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 12px; align-items: flex-start;">
+            <div id="exchange-filter" class="exchange-filter">
+              <!-- Exchange filters will be injected here -->
+            </div>
+            <div class="premium-base-selector" style="font-size: 14px; display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+              <strong>김프 기준:</strong>
+              <label style="cursor:pointer;"><input type="radio" name="premium-base" value="upbit" checked> 업비트</label>
+              <label style="cursor:pointer;"><input type="radio" name="premium-base" value="bithumb"> 빗썸</label>
+              <label style="cursor:pointer; margin-left: 16px;"><input type="checkbox" id="toggle-usd-price" checked> 달러 가격 표시</label>
+            </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th data-sort="name" style="min-width: 150px; text-align: left;">이름</th>
+                <th data-sort="upbit" class="col-upbit text-right">업비트</th>
+                <th data-sort="bithumb" class="col-bithumb text-right">빗썸</th>
+                <th data-sort="binance" class="col-binance text-right">바이낸스 (현물)</th>
+                <th data-sort="binance_perp" class="col-binance_perp text-right">바이낸스 (선물)</th>
+                <th data-sort="bybit" class="col-bybit text-right">바이비트 (현물)</th>
+                <th data-sort="bybit_perp" class="col-bybit_perp text-right">바이비트 (선물)</th>
+                <th data-sort="okx" class="col-okx text-right">OKX (현물)</th>
+                <th data-sort="okx_perp" class="col-okx_perp text-right">OKX (선물)</th>
+                <th data-sort="bitget" class="col-bitget text-right">Bitget (현물)</th>
+                <th data-sort="bitget_perp" class="col-bitget_perp text-right">Bitget (선물)</th>
+                <th data-sort="gate" class="col-gate text-right">Gate.io (현물)</th>
+                <th data-sort="gate_perp" class="col-gate_perp text-right">Gate.io (선물)</th>
+                <th data-sort="hyperliquid_spot" class="col-hyperliquid_spot text-right">Hyperliquid (현물)</th>
+                <th data-sort="hyperliquid_perp" class="col-hyperliquid_perp text-right">Hyperliquid (선물)</th>
+                <th data-sort="change" class="text-right">전일대비</th>
+                <th data-sort="volume" class="text-right">거래대금</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr><td colspan="17" style="text-align:center; padding: 20px; color: #848e9c;">데이터를 불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 고래 추적 섹션 -->
+      <section id="section-whale" class="section">
+        <div class="section-header">
+          <h2>실시간 고래 추적</h2>
+          <div style="display:flex; flex-direction:column; align-items:flex-end;">
+            <p style="margin:0;">주요 네트워크 대규모 이체 감지 (5만 달러↑)</p>
+            <div class="whale-status-bar">
+              <span><span class="status-dot" id="status-btc"></span>BTC</span>
+              <span><span class="status-dot" id="status-eth"></span>ETH/ARB</span>
+              <span><span class="status-dot" id="status-xrp"></span>XRP</span>
+              <span><span class="status-dot" id="status-sol"></span>SOL</span>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar" style="justify-content: flex-start;">
+          <select id="whale-filter" class="search-input" style="width: 140px; cursor: pointer;">
+            <option value="ALL">전체 보기</option>
+            <option value="BTC">BTC (비트코인)</option>
+            <option value="ETH">ETH (이더리움)</option>
+            <option value="ARB">ARB (아비트럼)</option>
+            <option value="SOL">SOL (솔라나)</option>
+            <option value="XRP">XRP (리플)</option>
+            <option value="USDT">USDT (ERC20)</option>
+            <option value="USDC">USDC (스테이블)</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>시간</th>
+                <th>코인</th>
+                <th class="text-right">수량</th>
+                <th class="text-right">가치 (KRW)</th>
+                <th class="text-right">정보</th>
+              </tr>
+            </thead>
+            <tbody id="whale-table-body">
+              <tr><td colspan="5" style="text-align:center; padding: 20px; color: #848e9c;">실시간 데이터를 수신 대기 중... (잠시만 기다려주세요)</td></tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <select id="whale-per-page" class="btn-page" style="margin-right: 10px; cursor: pointer;">
+              <option value="10" selected>10개씩</option>
+              <option value="20">20개씩</option>
+              <option value="50">50개씩</option>
+            </select>
+            <button type="button" id="btn-prev-whale" class="btn-page">이전</button>
+            <span id="page-info-whale" class="page-info">1 / 1</span>
+            <button type="button" id="btn-next-whale" class="btn-page">다음</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 펀비 비교 섹션 (확장용) -->
+      <section id="section-funbi" class="section">
+        <div class="section-header">
+          <h2>펀딩비(Funding Rate) 비교</h2>
+          <p>주요 해외 선물 거래소의 실시간 펀딩비 비교</p>
+        </div>
+        <div class="toolbar">
+          <div class="search-wrap">
+            <input type="text" id="search-funbi" class="search-input" placeholder="코인 검색..." autocomplete="off">
+          </div>
+          <div class="meta">
+            <button type="button" id="btn-refresh-funbi" class="btn-refresh">새로고침</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table funbi-table">
+            <thead>
+              <tr>
+                <th data-sort="name" style="text-align: left; padding-left: 18px;">이름</th>
+                <th data-sort="binance" class="text-right"><img src="https://www.google.com/s2/favicons?domain=binance.com&sz=32" class="exchange-icon">Binance</th>
+                <th data-sort="bybit" class="text-right"><img src="https://www.google.com/s2/favicons?domain=bybit.com&sz=32" class="exchange-icon">Bybit</th>
+                <th data-sort="okx" class="text-right"><img src="https://www.google.com/s2/favicons?domain=okx.com&sz=32" class="exchange-icon">OKX</th>
+                <th data-sort="bitget" class="text-right"><img src="https://www.google.com/s2/favicons?domain=bitget.com&sz=32" class="exchange-icon">Bitget</th>
+                <th data-sort="gate" class="text-right"><img src="https://www.google.com/s2/favicons?domain=gate.io&sz=32" class="exchange-icon">Gate.io</th>
+                <th data-sort="hyperliquid" class="text-right"><img src="https://www.google.com/s2/favicons?domain=hyperliquid.xyz&sz=32" class="exchange-icon">Hyperliquid</th>
+              </tr>
+            </thead>
+            <tbody id="funbi-table-body">
+              <tr><td colspan="7" style="text-align:center; padding: 20px; color: #848e9c;">데이터를 불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p style="color: #5e6673; font-size: 13px; text-align: center; margin-top: 40px;">데이터: 업비트·빗썸·바이낸스·바이비트·OKX 공개 API · 환율: Manana API · 참고용이며 투자 권유가 아닙니다.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
