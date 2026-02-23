@@ -20,7 +20,7 @@
   // 고래 추적 설정
   const WHALE_THRESHOLD_USD = 2000; // 100만 달러 이상 감지
   const PROXY_CANDIDATES = [
-    url => '/api/proxy?url=' + encodeURIComponent(url), // Vercel 서버리스 함수 (최우선)
+    url => '/api/proxy?url=' + encodeURIComponent(url), // Vercel 서버리스 함수
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),
     url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
     url => 'https://thingproxy.freeboard.io/fetch/' + url,
