@@ -1,12 +1,8 @@
 {
   "name": "kimchi-premium-server",
   "version": "1.0.0",
-  "description": "Kimchi Premium Backend Server",
-  "main": "server.js",
-  "scripts": {
-  },
+  "description": "Kimchi Premium Site",
   "dependencies": {
-    "express": "^4.18.2",
     "axios": "^1.6.0"
   }
 }
