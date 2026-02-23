@@ -22,6 +22,7 @@
   const PROXY_CANDIDATES = [
     url => '/api/proxy?url=' + encodeURIComponent(url), // Vercel 서버리스 함수
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),
+    url => '/api/proxy?url=' + encodeURIComponent(url), // Vercel 서버리스 함수 (백업)
     url => 'https://api.allorigins.win/get?url=' + encodeURIComponent(url),
     url => 'https://thingproxy.freeboard.io/fetch/' + url,
     url => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
@@ -30,6 +31,8 @@
   const POST_SUPPORTING_PROXIES = [
     PROXY_CANDIDATES[0], // Vercel API
     PROXY_CANDIDATES[1]  // corsproxy.io (백업)
+    PROXY_CANDIDATES[1], // Vercel API
+    PROXY_CANDIDATES[0]  // corsproxy.io
   ];
 
   async function fetchProxy(url, options = {}) {
