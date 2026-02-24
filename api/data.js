@@ -83,6 +83,24 @@ async function fetchJson(url, options = {}, retries = 1) {
     }
 }
 
+// [수정] IP 차단을 우회하기 위한 새로운 프록시 요청 함수
+async function fetchJsonViaProxy(url) {
+    // cors.bridged.cc는 GET 요청만 지원하는 것으로 보입니다.
+    const proxyUrl = `https://cors.bridged.cc/${url}`;
+    try {
+        const response = await axios({
+            method: 'GET',
+            url: `${proxyUrl}`, // 프록시 URL에 타임스탬프 추가는 불필요할 수 있음
+            headers: { 'User-Agent': 'Mozilla/5.0', 'x-request-url': url },
+            timeout: 8000
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`[API-PROXY] Proxy fetch failed for ${url}: ${error.message}`);
+        return null;
+    }
+}
+
 // 각 거래소 데이터 가져오는 함수들 (app.js에서 이동)
 async function getExchangeRate() {
     const data = await fetchJson(EXCHANGE_RATE_URL);
@@ -119,17 +137,14 @@ async function getBinanceTickers() {
     return {};
 }
 async function getBybitTickers() {
-    // [복원] IP 차단 우회를 위해 여러 도메인 시도
-    for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
-        if (res && res.result && res.result.list) {
-            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-                return acc;
-            }, {});
-        }
+    const res = await fetchJsonViaProxy(`https://api.bybit.com/v5/market/tickers?category=spot`);
+    if (res && res.result && res.result.list) {
+        return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+            return acc;
+        }, {});
     }
-    console.error(`[API] All Bybit spot domains failed.`);
+    console.error(`[API] Bybit spot fetch failed via proxy.`);
     return {};
 }
 async function getOkxTickers() {
@@ -183,48 +198,39 @@ async function getGateioTickers() {
     }, {});
 }
 async function getBinanceFuturesTickers() {
-    // [복원] IP 차단 우회를 위해 여러 도메인 시도
-    for (const domain of BINANCE_FUTURES_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/fapi/v1/ticker/24hr`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-                return acc;
-            }, {});
-        }
+    const list = await fetchJsonViaProxy(`https://fapi.binance.com/fapi/v1/ticker/24hr`);
+    if (list && Array.isArray(list)) {
+        return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+            return acc;
+        }, {});
     }
-    console.error(`[API] All Binance futures domains failed.`);
+    console.error(`[API] Binance futures fetch failed via proxy.`);
     return {};
 }
 async function getBinanceFundingRates() {
-    // [복원] IP 차단 우회를 위해 여러 도메인 시도
-    for (const domain of BINANCE_FUTURES_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/fapi/v1/premiumIndex`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = {
-                    funding: parseFloat(t.lastFundingRate),
-                    nextFundingTime: parseInt(t.nextFundingTime)
-                };
-                return acc;
-            }, {});
-        }
+    const list = await fetchJsonViaProxy(`https://fapi.binance.com/fapi/v1/premiumIndex`);
+    if (list && Array.isArray(list)) {
+        return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = {
+                funding: parseFloat(t.lastFundingRate),
+                nextFundingTime: parseInt(t.nextFundingTime)
+            };
+            return acc;
+        }, {});
     }
-    console.error(`[API] All Binance funding domains failed.`);
+    console.error(`[API] Binance funding fetch failed via proxy.`);
     return {};
 }
 async function getBybitFuturesTickers() {
-    // [복원] IP 차단 우회를 위해 여러 도메인 시도
-    for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
-        if (res && res.result && res.result.list) {
-            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
-                return acc;
-            }, {});
-        }
+    const res = await fetchJsonViaProxy(`https://api.bybit.com/v5/market/tickers?category=linear`);
+    if (res && res.result && res.result.list) {
+        return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
+            return acc;
+        }, {});
     }
-    console.error(`[API] All Bybit futures domains failed.`);
+    console.error(`[API] Bybit futures fetch failed via proxy.`);
     return {};
 }
 async function getOkxFuturesTickers() {
