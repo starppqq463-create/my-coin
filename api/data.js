@@ -178,14 +178,25 @@ async function getGateioTickers() {
 async function getBinanceFuturesTickers() {
     for (const domain of BINANCE_FUTURES_DOMAINS) {
         const list = await fetchJson(`https://${domain}/fapi/v1/ticker/24hr`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-                return acc;
-            }, {});
-        }
+        if (list && Array.isArray(list)) return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+            return acc;
+        }, {});
     }
     console.error(`[API] All Binance futures domains failed.`);
+    return {};
+}
+async function getBinanceFundingRates() {
+    for (const domain of BINANCE_FUTURES_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/fapi/v1/premiumIndex`, {}, 0);
+        if (list && Array.isArray(list)) return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+            acc[t.symbol.replace('USDT', '')] = {
+                funding: parseFloat(t.lastFundingRate),
+                nextFundingTime: parseInt(t.nextFundingTime)
+            };
+            return acc;
+        }, {});
+    }
     return {};
 }
 async function getBybitFuturesTickers() {
@@ -206,6 +217,17 @@ async function getOkxFuturesTickers() {
     if (!res || !res.data) return {};
     return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
         acc[t.instId.replace('-USDT-SWAP', '')] = { price: parseFloat(t.last) };
+        return acc;
+    }, {});
+}
+async function getOkxFundingRates() {
+    const res = await fetchJson(OKX_FUNDING_URL);
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT-SWAP', '')] = {
+            funding: parseFloat(t.fundingRate),
+            nextFundingTime: parseInt(t.fundingTime)
+        };
         return acc;
     }, {});
 }
@@ -263,7 +285,9 @@ module.exports = async (req, res) => {
             getBybitFuturesTickers(),
             getOkxFuturesTickers(),
             getBitgetFuturesTickers(),
-            getGateioFuturesTickers()
+            getGateioFuturesTickers(),
+            getBinanceFundingRates(), // 펀딩비 추가
+            getOkxFundingRates()      // 펀딩비 추가
         ]);
 
         const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
@@ -283,8 +307,25 @@ module.exports = async (req, res) => {
             bybitFuturesMap: getValue(results[10], {}),
             okxFuturesMap: getValue(results[11], {}),
             bitgetFuturesMap: getValue(results[12], {}),
-            gateioFuturesMap: getValue(results[13], {}),
+            gateioFuturesMap: getValue(results[13], {})
         };
+
+        // 펀딩비 데이터 병합
+        const binanceFunding = getValue(results[14], {});
+        const okxFunding = getValue(results[15], {});
+
+        for (const symbol in binanceFunding) {
+            if (allData.binanceFuturesMap[symbol]) {
+                allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
+                allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
+            }
+        }
+        for (const symbol in okxFunding) {
+            if (allData.okxFuturesMap[symbol]) {
+                allData.okxFuturesMap[symbol].funding = okxFunding[symbol].funding;
+                allData.okxFuturesMap[symbol].nextFundingTime = okxFunding[symbol].nextFundingTime;
+            }
+        }
 
         cache.kimchi = allData;
         cache.kimchiTimestamp = now;
