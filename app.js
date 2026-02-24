@@ -344,6 +344,30 @@
     ).catch(() => ({}));
   }
 
+  async function getBinanceFundingRates() {
+    return fetchJson('https://fapi.binance.com/fapi/v1/premiumIndex').then(list =>
+      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = {
+            rate: parseFloat(t.lastFundingRate),
+            time: parseInt(t.nextFundingTime)
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  async function getOkxFundingRates() {
+    return fetchJson('https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP').then(res =>
+      (res.data || []).filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT-SWAP', '')] = {
+            rate: parseFloat(t.fundingRate),
+            time: parseInt(t.fundingTime)
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
   async function getUpbitMarkets() {
     const res = await fetch(UPBIT_MARKETS_URL);
     if (!res.ok) throw new Error('업비트 마켓 목록을 가져올 수 없습니다.');
@@ -578,15 +602,20 @@
     const tbody = $('#funbi-table-body');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">펀딩비 데이터를 불러오는 중...</td></tr>';
     
-    // 서버에서 모든 데이터를 가져와 펀비 데이터만 사용
-    fetch('/api/data').then(res => res.json()).then(data => {
+    // 펀비 데이터도 클라이언트에서 직접 호출 (서버 의존성 제거)
+    Promise.all([
+      fetch('/api/data').then(res => res.json()).catch(() => ({})), // Bitget, Gate, Hyperliquid 등은 서버 데이터 활용 (혹은 필요시 추가 구현)
+      getBinanceFundingRates(),
+      getBybitFuturesTickers(), // { price, funding, nextFundingTime } 반환
+      getOkxFundingRates()
+    ]).then(([serverData, binanceMap, bybitMap, okxMap]) => {
       if (funbiTimer) clearInterval(funbiTimer);
 
       // 김프 비교 목록(allRows)과 동일한 코인만 표시
       const targetList = allRows.length > 0 ? allRows : [];
       
       // 다음 펀딩 시간 설정
-      const btcBybit = data.bybitFuturesMap && data.bybitFuturesMap['BTC'];
+      const btcBybit = bybitMap['BTC'];
       standardNextFundingTime = btcBybit ? btcBybit.nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
       
@@ -594,12 +623,12 @@
         const sym = row.name;
         return {
           name: sym,
-          binance: data.binanceFuturesMap[sym]?.funding ?? null,
-          bybit: data.bybitFuturesMap[sym]?.funding ?? null,
-          okx: data.okxFuturesMap[sym]?.funding ?? null,
-          bitget: data.bitgetFuturesMap[sym]?.funding ?? null,
-          gate: data.gateioFuturesMap[sym]?.funding ?? null,
-          hyperliquid: data.hyperliquidMap[sym]?.funding ?? null
+          binance: binanceMap[sym]?.rate ?? null,
+          bybit: bybitMap[sym]?.funding ?? null,
+          okx: okxMap[sym]?.rate ?? null,
+          bitget: serverData.bitgetFuturesMap?.[sym]?.funding ?? null,
+          gate: serverData.gateioFuturesMap?.[sym]?.funding ?? null,
+          hyperliquid: serverData.hyperliquidMap?.[sym]?.funding ?? null
         };
       }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || r.hyperliquid != null);
       
