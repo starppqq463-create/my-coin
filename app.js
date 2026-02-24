@@ -549,9 +549,12 @@
     tbody.innerHTML = rows.map(r => {      
       const basePrice = r[premiumBase];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
-      const fmtKrw = v => v != null ? formatNumber(v, 0) : '-';
       
-      const fmtOverseas = (price) => {
+      // 가격을 감싸는 span 추가 (국내 거래소용)
+      const fmtKrwWithSpan = (v, symbol, exchange) => v != null ? `<span id="price-${exchange}-${symbol}" class="price-value">${formatNumber(v, 0)}</span>` : '-';
+
+      // 가격을 감싸는 span 추가 (해외 거래소용)
+      const fmtOverseasWithSpan = (price, symbol, exchange) => {
         if (price == null) return '-';
         const priceKrw = price * krwPerUsd;
         let premiumHtml = '';
@@ -560,7 +563,7 @@
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
           premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
         }
-        return `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        return `<span id="price-${exchange}-${symbol}" class="price-value">${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span></span>${premiumHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
@@ -577,8 +580,8 @@
             <img class="coin-icon" src="${imgUrl}" alt="" referrerpolicy="no-referrer" onerror="this.src='${COIN_IMG_FALLBACK}'">
             <div><span class="coin-name">${r.name}</span><span class="coin-korean-name">${displayName}</span></div>
           </td>
-          <td id="cell-upbit-${r.name}" class="text-right col-upbit">${fmtKrwWithSpan(r.upbit, r.name)}</td>
-          <td id="cell-bithumb-${r.name}" class="text-right col-bithumb">${fmtBithumbWithSpan(r.bithumb, r.name)}</td>
+          <td id="cell-upbit-${r.name}" class="text-right col-upbit">${fmtKrwWithSpan(r.upbit, r.name, 'upbit')}</td>
+          <td id="cell-bithumb-${r.name}" class="text-right col-bithumb">${fmtKrwWithSpan(r.bithumb, r.name, 'bithumb')}</td>
           <td id="cell-binance-${r.name}" class="text-right col-binance">${fmtOverseasWithSpan(r.binance, r.name, 'binance')}</td>
           <td id="cell-binance_perp-${r.name}" class="text-right col-binance_perp">${fmtOverseasWithSpan(r.binance_perp, r.name, 'binance_perp')}</td>
           <td id="cell-bybit-${r.name}" class="text-right col-bybit">${fmtOverseasWithSpan(r.bybit, r.name, 'bybit')}</td>
@@ -614,7 +617,6 @@
       const targetList = allRows.length > 0 ? allRows : [];
       
       // 다음 펀딩 시간 설정
-      const btcBybit = bybitMap['BTC'];
       standardNextFundingTime = data.bybitFuturesMap['BTC'] ? data.bybitFuturesMap['BTC'].nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
       
@@ -622,12 +624,12 @@
         const sym = row.name;
         return {
           name: sym,
-          binance: data.binanceFuturesMap[sym]?.funding ?? null,
-          bybit: data.bybitFuturesMap[sym]?.funding ?? null,
-          okx: data.okxFuturesMap[sym]?.funding ?? null,
-          bitget: serverData.bitgetFuturesMap?.[sym]?.funding ?? null,
-          gate: serverData.gateioFuturesMap?.[sym]?.funding ?? null,
-          hyperliquid: serverData.hyperliquidMap?.[sym]?.funding ?? null
+          binance: data.binanceFuturesMap?.[sym]?.funding ?? null,
+          bybit: data.bybitFuturesMap?.[sym]?.funding ?? null,
+          okx: data.okxFuturesMap?.[sym]?.funding ?? null,
+          bitget: data.bitgetFuturesMap?.[sym]?.funding ?? null,
+          gate: data.gateioFuturesMap?.[sym]?.funding ?? null,
+          hyperliquid: data.hyperliquidMap?.[sym]?.funding ?? null
         };
       }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || r.hyperliquid != null);
       
