@@ -322,14 +322,14 @@ module.exports = async (req, res) => {
             getExchangeRate(),
             getUpbitTickers(upbitMarketBatch),
             getBithumbTickers(),
-            getBinanceTickers(),
-            getBybitTickers(),
+            // getBinanceTickers(), // 클라이언트 직접 요청으로 변경
+            // getBybitTickers(),   // 클라이언트 직접 요청으로 변경
             getOkxTickers(),
             getBitgetTickers(),
             getGateioTickers(),
             getHyperliquidTickers(),
-            getBinanceFuturesTickers(),
-            getBybitFuturesTickers(),
+            // getBinanceFuturesTickers(), // 클라이언트 직접 요청으로 변경
+            // getBybitFuturesTickers(),   // 클라이언트 직접 요청으로 변경
             getOkxFuturesTickers(),
             getBitgetFuturesTickers(),
             getGateioFuturesTickers(),
@@ -344,14 +344,14 @@ module.exports = async (req, res) => {
             rate: getValue(results[0], 1350),
             upbitTickers: getValue(results[1], []),
             bithumbMap: getValue(results[2], {}),
-            binanceMap: getValue(results[3], {}),
-            bybitMap: getValue(results[4], {}),
+            binanceMap: {}, // 클라이언트에서 채움
+            bybitMap: {},   // 클라이언트에서 채움
             okxMap: getValue(results[5], {}),
             bitgetMap: getValue(results[6], {}),
             gateMap: getValue(results[7], {}),
             hyperliquidMap: getValue(results[8], {}),
-            binanceFuturesMap: getValue(results[9], {}),
-            bybitFuturesMap: getValue(results[10], {}),
+            binanceFuturesMap: {}, // 클라이언트에서 채움
+            bybitFuturesMap: {},   // 클라이언트에서 채움
             okxFuturesMap: getValue(results[11], {}),
             bitgetFuturesMap: getValue(results[12], {}),
             gateioFuturesMap: getValue(results[13], {})

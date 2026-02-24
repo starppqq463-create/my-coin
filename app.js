@@ -1109,15 +1109,23 @@
     const tbody = $('#table-body');
     tbody.innerHTML = '<tr><td colspan="17" class="loading">서버에서 데이터를 가져오는 중...</td></tr>';
     try {
-      // 1. 서버 API에서 모든 거래소 데이터 스냅샷을 한 번에 가져옴
-      const res = await fetch('/api/data');
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: '서버 응답 오류' }));
-        throw new Error(errData.error || `서버 에러: ${res.status}`);
-      }
-      const data = await res.json();
+      // 1. 서버 데이터 (Upbit, Bithumb, OKX 등)와 클라이언트 데이터 (Binance, Bybit) 병렬 요청
+      const [serverData, binanceMap, bybitMap, binanceFuturesMap, bybitFuturesMap] = await Promise.all([
+        fetch('/api/data').then(res => res.json()),
+        getBinanceTickers(),       // 내 컴퓨터에서 직접 요청
+        getBybitTickers(),         // 내 컴퓨터에서 직접 요청
+        getBinanceFuturesTickers(),// 내 컴퓨터에서 직접 요청
+        getBybitFuturesTickers()   // 내 컴퓨터에서 직접 요청
+      ]);
 
-      // 2. 스냅샷 데이터로 테이블 채우기
+      // 2. 데이터 병합
+      const data = serverData;
+      data.binanceMap = binanceMap;
+      data.bybitMap = bybitMap;
+      data.binanceFuturesMap = binanceFuturesMap;
+      data.bybitFuturesMap = bybitFuturesMap;
+
+      // 3. 스냅샷 데이터로 테이블 채우기
       krwPerUsd = data.rate;
       setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
 
