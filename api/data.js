@@ -137,14 +137,16 @@ async function getBinanceTickers() {
     return {};
 }
 async function getBybitTickers() {
-    const res = await fetchJsonViaProxy(`https://api.bybit.com/v5/market/tickers?category=spot`);
-    if (res && res.result && res.result.list) {
-        return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-            acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-            return acc;
-        }, {});
+    for (const domain of BYBIT_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
+        if (res && res.result && res.result.list) {
+            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+                return acc;
+            }, {});
+        }
     }
-    console.error(`[API] Bybit spot fetch failed via proxy.`);
+    console.error(`[API] All Bybit spot domains failed.`);
     return {};
 }
 async function getOkxTickers() {
@@ -198,39 +200,45 @@ async function getGateioTickers() {
     }, {});
 }
 async function getBinanceFuturesTickers() {
-    const list = await fetchJsonViaProxy(`https://fapi.binance.com/fapi/v1/ticker/24hr`);
-    if (list && Array.isArray(list)) {
-        return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-            acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-            return acc;
-        }, {});
+    for (const domain of BINANCE_FUTURES_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/fapi/v1/ticker/24hr`, {}, 0);
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+                return acc;
+            }, {});
+        }
     }
-    console.error(`[API] Binance futures fetch failed via proxy.`);
+    console.error(`[API] All Binance futures domains failed.`);
     return {};
 }
 async function getBinanceFundingRates() {
-    const list = await fetchJsonViaProxy(`https://fapi.binance.com/fapi/v1/premiumIndex`);
-    if (list && Array.isArray(list)) {
-        return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-            acc[t.symbol.replace('USDT', '')] = {
-                funding: parseFloat(t.lastFundingRate),
-                nextFundingTime: parseInt(t.nextFundingTime)
-            };
-            return acc;
-        }, {});
+    for (const domain of BINANCE_FUTURES_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/fapi/v1/premiumIndex`, {}, 0);
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = {
+                    funding: parseFloat(t.lastFundingRate),
+                    nextFundingTime: parseInt(t.nextFundingTime)
+                };
+                return acc;
+            }, {});
+        }
     }
-    console.error(`[API] Binance funding fetch failed via proxy.`);
+    console.error(`[API] All Binance funding domains failed.`);
     return {};
 }
 async function getBybitFuturesTickers() {
-    const res = await fetchJsonViaProxy(`https://api.bybit.com/v5/market/tickers?category=linear`);
-    if (res && res.result && res.result.list) {
-        return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-            acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
-            return acc;
-        }, {});
+    for (const domain of BYBIT_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
+        if (res && res.result && res.result.list) {
+            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
+                return acc;
+            }, {});
+        }
     }
-    console.error(`[API] Bybit futures fetch failed via proxy.`);
+    console.error(`[API] All Bybit futures domains failed.`);
     return {};
 }
 async function getOkxFuturesTickers() {
