@@ -237,6 +237,7 @@
   let standardNextFundingTime = null;
   let hyperliquidNextFundingTime = null;
   let krwPerUsd = 1350;
+  let sockets = {}; // 웹소켓 인스턴스 관리
 
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => el.querySelectorAll(sel);
@@ -547,6 +548,147 @@
     }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || (r.hyperliquid_spot != null || r.hyperliquid_perp != null));
   }
 
+  // --- 실시간 데이터 처리 (웹소켓) ---
+  function connectWebsockets(markets) {
+    const symbols = markets.map(m => m.replace('KRW-', ''));
+    connectUpbitSocket(markets);
+    connectBithumbSocket(symbols);
+    connectBinanceSocket(symbols);
+    connectBybitSocket(symbols);
+    // OKX, Bitget 등 다른 거래소도 유사하게 추가 가능
+  }
+
+  function reconnect(name, connectFn) {
+    console.log(`${name} 웹소켓 연결이 끊겼습니다. 3초 후 재연결합니다.`);
+    if (sockets[name]) {
+      sockets[name].close();
+    }
+    setTimeout(connectFn, 3000);
+  }
+
+  function connectUpbitSocket(markets) {
+    const name = 'Upbit';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+    sockets[name] = ws;
+    ws.onopen = () => {
+      console.log(`${name} 웹소켓 연결 성공`);
+      ws.send(JSON.stringify([
+        { ticket: 'kimchi-premium-monitor' },
+        { type: 'ticker', codes: markets }
+      ]));
+    };
+    ws.onmessage = async (e) => {
+      const data = await (e.data instanceof Blob ? e.data.text() : e.data);
+      const t = JSON.parse(data);
+      updateRowData(t.code.replace('KRW-', ''), { upbit: t.trade_price });
+    };
+    ws.onclose = () => reconnect(name, () => connectUpbitSocket(markets));
+  }
+
+  function connectBithumbSocket(symbols) {
+    const name = 'Bithumb';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://pubwss.bithumb.com/pub/ws');
+    sockets[name] = ws;
+    ws.onopen = () => {
+      console.log(`${name} 웹소켓 연결 성공`);
+      const krwSymbols = symbols.map(s => `${s}_KRW`);
+      ws.send(JSON.stringify({ type: 'ticker', symbols: krwSymbols, tickTypes: ['MID'] }));
+    };
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data);
+      if (t.type === 'ticker' && t.content) {
+        updateRowData(t.content.symbol.replace('_KRW', ''), { bithumb: parseFloat(t.content.closePrice) });
+      }
+    };
+    ws.onclose = () => reconnect(name, () => connectBithumbSocket(symbols));
+  }
+
+  function connectBinanceSocket(symbols) {
+    const name = 'Binance';
+    if (sockets[name]) sockets[name].close();
+    const streams = symbols.map(s => `${s.toLowerCase()}usdt@ticker`).join('/');
+    const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+    sockets[name] = ws;
+    ws.onopen = () => console.log(`${name} 웹소켓 연결 성공`);
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data).data;
+      if (t.e === '24hrTicker') {
+        updateRowData(t.s.replace('USDT', ''), { binance: parseFloat(t.c) });
+      }
+    };
+    ws.onclose = () => reconnect(name, () => connectBinanceSocket(symbols));
+  }
+
+  function connectBybitSocket(symbols) {
+    const name = 'Bybit';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
+    sockets[name] = ws;
+    ws.onopen = () => {
+      console.log(`${name} 웹소켓 연결 성공`);
+      const args = symbols.map(s => `tickers.${s}USDT`);
+      ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data);
+      if (t.topic && t.topic.startsWith('tickers') && t.data) {
+        updateRowData(t.data.symbol.replace('USDT', ''), { bybit: parseFloat(t.data.lastPrice) });
+      }
+    };
+    ws.onclose = () => reconnect(name, () => connectBybitSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+  }
+
+  function updateRowData(symbol, newData) {
+    const row = allRows.find(r => r.name === symbol);
+    if (!row) return;
+
+    Object.assign(row, newData);
+
+    const premiumBasePrice = premiumBase === 'bithumb' ? row.bithumb : row.upbit;
+
+    const updateCell = (exchange, price) => {
+      const cell = $(`#cell-${exchange}-${symbol}`);
+      if (!cell) return;
+
+      let content;
+      if (exchange === 'upbit' || exchange === 'bithumb') {
+        content = price != null ? formatNumber(price, 0) : '-';
+      } else {
+        if (price == null) {
+          content = '-';
+        } else {
+          const priceKrw = price * krwPerUsd;
+          let premiumHtml = '';
+          if (premiumBasePrice != null && premiumBasePrice > 0 && price > 0) {
+            const premium = ((premiumBasePrice / priceKrw) - 1) * 100;
+            const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
+            premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
+          }
+          content = `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        }
+      }
+      cell.innerHTML = content;
+      cell.classList.add('price-flash');
+      setTimeout(() => cell.classList.remove('price-flash'), 700);
+    };
+
+    // 방금 업데이트된 가격 셀 업데이트
+    const updatedExchange = Object.keys(newData)[0];
+    updateCell(updatedExchange, row[updatedExchange]);
+
+    // 김프 기준가가 변경되었을 수 있으므로, 해당 코인의 모든 해외거래소 셀을 다시 계산하여 업데이트
+    const exchangesToUpdate = ['binance', 'binance_perp', 'bybit', 'bybit_perp', 'okx', 'okx_perp', 'bitget', 'bitget_perp', 'gate', 'gate_perp', 'hyperliquid_spot', 'hyperliquid_perp'];
+    if (updatedExchange === 'upbit' || updatedExchange === 'bithumb') {
+        exchangesToUpdate.forEach(ex => {
+            if (row[ex] != null) updateCell(ex, row[ex]);
+        });
+    }
+  }
+
+  // 초기 테이블 렌더링 (스켈레톤)
   function renderTable(rows) {
     const tbody = $('#table-body');
     if (!tbody) return;
@@ -555,24 +697,10 @@
       return;
     }
 
-    const premiumBasePrice = premiumBase === 'bithumb' ? 'bithumb' : 'upbit';
-
     tbody.innerHTML = rows.map(r => {
-      const basePrice = r[premiumBasePrice];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
       const fmtKrw = v => v != null ? formatNumber(v, 0) : '-';
-      
-      const fmtOverseas = (price) => {
-        if (price == null) return '-';
-        const priceKrw = price * krwPerUsd;
-        let premiumHtml = '';
-        if (basePrice != null && basePrice > 0 && price > 0) {
-          const premium = ((basePrice / priceKrw) - 1) * 100;
-          const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
-          premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
-        }
-        return `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
-      };
+      const fmtOverseas = (price) => price != null ? `${formatNumber(price * krwPerUsd, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>` : '-';
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
       const imgUrl = getCoinIconUrl(r.name);
@@ -589,20 +717,20 @@
             <img class="coin-icon" src="${imgUrl}" alt="" referrerpolicy="no-referrer" onerror="this.src='${COIN_IMG_FALLBACK}'">
             <div><span class="coin-name">${r.name}</span><span class="coin-korean-name">${displayName}</span></div>
           </td>
-          <td class="text-right col-upbit">${fmtKrw(r.upbit)}</td>
-          <td class="text-right col-bithumb">${fmtKrw(r.bithumb)}</td>
-          <td class="text-right col-binance">${fmtOverseas(r.binance)}</td>
-          <td class="text-right col-binance_perp">${fmtOverseas(r.binance_perp)}</td>
-          <td class="text-right col-bybit">${fmtOverseas(r.bybit)}</td>
-          <td class="text-right col-bybit_perp">${fmtOverseas(r.bybit_perp)}</td>
-          <td class="text-right col-okx">${fmtOverseas(r.okx)}</td>
-          <td class="text-right col-okx_perp">${fmtOverseas(r.okx_perp)}</td>
-          <td class="text-right col-bitget">${fmtOverseas(r.bitget)}</td>
-          <td class="text-right col-bitget_perp">${fmtOverseas(r.bitget_perp)}</td>
-          <td class="text-right col-gate">${fmtOverseas(r.gate)}</td>
-          <td class="text-right col-gate_perp">${fmtOverseas(r.gate_perp)}</td>
-          <td class="text-right col-hyperliquid_spot">${fmtOverseas(r.hyperliquid_spot)}</td>
-          <td class="text-right col-hyperliquid_perp">${fmtOverseas(r.hyperliquid_perp)}</td>
+          <td id="cell-upbit-${r.name}" class="text-right col-upbit">${fmtKrw(r.upbit)}</td>
+          <td id="cell-bithumb-${r.name}" class="text-right col-bithumb">${fmtKrw(r.bithumb)}</td>
+          <td id="cell-binance-${r.name}" class="text-right col-binance">${fmtOverseas(r.binance)}</td>
+          <td id="cell-binance_perp-${r.name}" class="text-right col-binance_perp">${fmtOverseas(r.binance_perp)}</td>
+          <td id="cell-bybit-${r.name}" class="text-right col-bybit">${fmtOverseas(r.bybit)}</td>
+          <td id="cell-bybit_perp-${r.name}" class="text-right col-bybit_perp">${fmtOverseas(r.bybit_perp)}</td>
+          <td id="cell-okx-${r.name}" class="text-right col-okx">${fmtOverseas(r.okx)}</td>
+          <td id="cell-okx_perp-${r.name}" class="text-right col-okx_perp">${fmtOverseas(r.okx_perp)}</td>
+          <td id="cell-bitget-${r.name}" class="text-right col-bitget">${fmtOverseas(r.bitget)}</td>
+          <td id="cell-bitget_perp-${r.name}" class="text-right col-bitget_perp">${fmtOverseas(r.bitget_perp)}</td>
+          <td id="cell-gate-${r.name}" class="text-right col-gate">${fmtOverseas(r.gate)}</td>
+          <td id="cell-gate_perp-${r.name}" class="text-right col-gate_perp">${fmtOverseas(r.gate_perp)}</td>
+          <td id="cell-hyperliquid_spot-${r.name}" class="text-right col-hyperliquid_spot">${fmtOverseas(r.hyperliquid_spot)}</td>
+          <td id="cell-hyperliquid_perp-${r.name}" class="text-right col-hyperliquid_perp">${fmtOverseas(r.hyperliquid_perp)}</td>
           <td class="text-right ${changeClass}">${r.change != null ? formatPercent(r.change) : '-'}</td>
           <td class="text-right volume">${formatNumber((r.volume || 0) / 1e6, 0)}백만</td>
         </tr>
@@ -1297,69 +1425,43 @@
     if (updateEl) updateEl.textContent = '마지막 갱신: ' + (time || '-');
   }
 
-  function load() {
+  async function initKimchiPremium() {
     const tbody = $('#table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오는 중... (서버 API 우선 시도)</td></tr>';
+    try {
+      // 1. 필수 데이터 병렬 요청 (환율, 업비트 마켓 목록)
+      const [rate, upbitMarkets] = await Promise.all([
+        getExchangeRate(),
+        getUpbitMarkets()
+      ]);
+      krwPerUsd = rate;
+      setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
 
-    // [개선] 모든 데이터를 한 번에 가져오는 통합 API 호출
-    fetch('/api/data')
-    .then(res => {
-        if (!res.ok) throw new Error('Server API failed with status: ' + res.status);
-        return res.json();
-    })
-    .then(data => {
-      console.log('Loaded data from server API');
-      krwPerUsd = data.rate;
-      setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
-      
-      allRows = buildRows(data.upbitTickers, data.bithumbMap, data.binanceMap, data.bybitMap, data.okxMap, data.bitgetMap, data.gateMap, data.hyperliquidMap, data.binanceFuturesMap, data.bybitFuturesMap, data.okxFuturesMap, data.bitgetFuturesMap, data.gateioFuturesMap);
-      
+      // 2. 초기 데이터 구조 생성 및 정렬
+      const marketBatch = buildMarketBatch(upbitMarkets);
+      const initialUpbitData = await getUpbitTickers(marketBatch); // 초기 가격은 HTTP로 한번만
+      allRows = buildRows(initialUpbitData, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});
+
+      // 3. 테이블 스켈레톤 렌더링 및 정렬 적용
       $$('.data-table th[data-sort]').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
       const th = $(`.data-table th[data-sort="${sortKey}"]`);
       if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
       applySortAndFilter();
-    }).catch(err => {
-      console.warn('Server API failed, falling back to client-side fetching.', err);
-      if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">서버 API 실패. 클라이언트 모드로 전환하여 데이터를 불러오는 중...</td></tr>';
 
-      // Fallback to client-side fetching
-      Promise.all([
-          getExchangeRate(),
-          getUpbitMarkets().then(buildMarketBatch).then(getUpbitTickers),
-          getBithumbTickers(),
-          getBinanceTickers(),
-          getBybitTickers(),
-          getOkxTickers(),
-          getBitgetTickers(),
-          getGateioTickers(),
-          getHyperliquidTickers(),
-          getBinanceFuturesTickers(),
-          getBybitFuturesTickers(),
-          getOkxFuturesTickers(),
-          getBitgetFuturesTickers(),
-          getGateioFuturesTickers()
-      ]).then(([rate, upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap]) => {
-          krwPerUsd = rate;
-          setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
-          allRows = buildRows(upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap);
-          
-          $$('.data-table th[data-sort]').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
-          const th = $(`.data-table th[data-sort="${sortKey}"]`);
-          if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
-          applySortAndFilter();
-      }).catch(fallbackErr => {
-          if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오지 못했습니다. 새로고침해 주세요.</td></tr>';
-          setMeta(krwPerUsd, null);
-          console.error('Client-side fallback also failed:', fallbackErr);
-      });
-    });
+      // 4. 웹소켓 연결 시작
+      connectWebsockets(marketBatch);
+
+    } catch (err) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading">초기 데이터 로딩 실패. 새로고침해 주세요. (${err.message})</td></tr>`;
+      setMeta(krwPerUsd, null);
+      console.error('Failed to initialize kimchi premium data:', err);
+    }
   }
 
   function init() {
     const searchEl = $('#search');
     const refreshBtn = $('#btn-refresh');
     if (searchEl) searchEl.addEventListener('input', applySortAndFilter);
-    if (refreshBtn) refreshBtn.addEventListener('click', load);
+    if (refreshBtn) refreshBtn.addEventListener('click', initKimchiPremium);
 
     const topBarContainer = $('.top-bar .container');
     if (topBarContainer) {
@@ -1552,9 +1654,8 @@
     });
 
     setupSort();
-    load();
+    initKimchiPremium();
     initWhaleTracker(); // 고래 추적 시작
-    setInterval(load, 30000); // 30초 간격으로 갱신
   }
 
   if (document.readyState === 'loading') {

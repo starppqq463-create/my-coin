@@ -182,6 +182,15 @@
     }
     .new-row { animation: flash 1s ease-out; }
 
+    /* 실시간 가격 업데이트 강조 */
+    @keyframes price-flash {
+      from { background-color: rgba(240, 185, 11, 0.4); }
+      to { background-color: transparent; }
+    }
+    .price-flash {
+      animation: price-flash 0.7s ease-out;
+    }
+
     /* 페이지네이션 */
     .pagination {
       display: flex;
@@ -310,7 +319,7 @@
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr><td colspan="17" style="text-align:center; padding: 20px; color: #848e9c;">데이터를 불러오는 중...</td></tr>
+              <tr><td colspan="17" class="loading" style="text-align:center; padding: 20px; color: #848e9c;">실시간 데이터 서버 연결 중...</td></tr>
             </tbody>
           </table>
         </div>
