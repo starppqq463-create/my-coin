@@ -1261,7 +1261,10 @@
     try {
       // 1. 서버 데이터 (Upbit, Bithumb, OKX 등)와 클라이언트 데이터 (Binance, Bybit) 병렬 요청
       const [serverData, binanceMap, bybitMap, binanceFuturesMap, bybitFuturesMap] = await Promise.all([
-        fetch('/api/data').then(res => res.json()),
+        fetch('/api/data').then(async res => {
+            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
+            return res.json();
+        }),
         getBinanceTickers(),       // 내 컴퓨터에서 직접 요청
         getBybitTickers(),         // 내 컴퓨터에서 직접 요청
         getBinanceFuturesTickers(),// 내 컴퓨터에서 직접 요청
@@ -1278,6 +1281,8 @@
       // 3. 스냅샷 데이터로 테이블 채우기
       krwPerUsd = data.rate;
       setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
+
+      if (!data.upbitTickers) throw new Error("서버 데이터 형식 오류 (upbitTickers missing)");
 
       const upbitMap = data.upbitTickers.reduce((acc, t) => {
         acc[t.market.replace('KRW-', '')] = t;

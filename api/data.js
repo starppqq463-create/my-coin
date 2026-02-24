@@ -350,14 +350,14 @@ module.exports = async (req, res) => {
             hyperliquidMap: getValue(results[8], {}),
             binanceFuturesMap: {},
             bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[11], {}),
-            bitgetFuturesMap: getValue(results[12], {}),
-            gateioFuturesMap: getValue(results[13], {})
+            okxFuturesMap: getValue(results[9], {}),
+            bitgetFuturesMap: getValue(results[10], {}),
+            gateioFuturesMap: getValue(results[11], {})
         };
 
         // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[14], {});
-        const okxFunding = getValue(results[15], {});
+        const binanceFunding = getValue(results[12], {});
+        const okxFunding = getValue(results[13], {});
 
         for (const symbol in binanceFunding) {
             if (allData.binanceFuturesMap[symbol]) {
