@@ -255,19 +255,18 @@ async function getOkxFuturesTickers() {
     return {};
 }
 async function getOkxFundingRates() {
-    for (const domain of OKX_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/api/v5/public/funding-rate-current?instType=SWAP`, {}, 0);
-        if (res && res.data) {
-            return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
-                acc[t.instId.replace('-USDT-SWAP', '')] = {
-                    funding: parseFloat(t.fundingRate),
-                    nextFundingTime: parseInt(t.fundingTime)
-                };
-                return acc;
-            }, {});
-        }
+    // OKX 펀딩비는 단일 API로 모든 SWAP 데이터를 가져옴
+    const res = await fetchJson(OKX_FUNDING_URL);
+    if (res && res.data) {
+        return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+            acc[t.instId.replace('-USDT-SWAP', '')] = {
+                funding: parseFloat(t.fundingRate),
+                nextFundingTime: parseInt(t.fundingTime)
+            };
+            return acc;
+        }, {});
     }
-    console.error(`[API] All OKX funding domains failed.`);
+    console.error(`[API] OKX funding fetch failed.`);
     return {};
 }
 async function getBitgetFuturesTickers() {
