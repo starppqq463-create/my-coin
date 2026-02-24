@@ -16,6 +16,7 @@ const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?
 const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.com', 'api3.binance.com'];
 const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
 const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
+const OKX_DOMAINS = ['www.okx.com', 'aws.okx.com'];
 
 // 캐시 저장소 및 유효 시간
 const cache = { kimchi: null, funbi: null };
@@ -131,12 +132,17 @@ async function getBybitTickers() {
     return {};
 }
 async function getOkxTickers() {
-    const res = await fetchJson(OKX_TICKER_URL);
-    if (!res || !res.data) return {};
-    return res.data.filter(t => t.instId.includes('-USDT')).reduce((acc, t) => {
-        acc[t.instId.replace('-USDT', '')] = parseFloat(t.last);
-        return acc;
-    }, {});
+    for (const domain of OKX_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/api/v5/market/tickers?instType=SPOT`, {}, 0);
+        if (res && res.data) {
+            return res.data.filter(t => t.instId.endsWith('-USDT')).reduce((acc, t) => {
+                acc[t.instId.replace('-USDT', '')] = parseFloat(t.last);
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All OKX spot domains failed.`);
+    return {};
 }
 async function getHyperliquidTickers() {
     const combined = {};
@@ -204,7 +210,11 @@ async function getBybitFuturesTickers() {
         const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate) };
+                acc[t.symbol.replace('USDT', '')] = {
+                    price: parseFloat(t.lastPrice),
+                    funding: parseFloat(t.fundingRate),
+                    nextFundingTime: parseInt(t.nextFundingTime)
+                };
                 return acc;
             }, {});
         }
@@ -213,29 +223,43 @@ async function getBybitFuturesTickers() {
     return {};
 }
 async function getOkxFuturesTickers() {
-    const res = await fetchJson(OKX_FUTURES_TICKER_URL);
-    if (!res || !res.data) return {};
-    return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
-        acc[t.instId.replace('-USDT-SWAP', '')] = { price: parseFloat(t.last) };
-        return acc;
-    }, {});
+    for (const domain of OKX_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/api/v5/market/tickers?instType=SWAP`, {}, 0);
+        if (res && res.data) {
+            return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+                acc[t.instId.replace('-USDT-SWAP', '')] = { price: parseFloat(t.last) };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All OKX futures domains failed.`);
+    return {};
 }
 async function getOkxFundingRates() {
-    const res = await fetchJson(OKX_FUNDING_URL);
-    if (!res || !res.data) return {};
-    return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
-        acc[t.instId.replace('-USDT-SWAP', '')] = {
-            funding: parseFloat(t.fundingRate),
-            nextFundingTime: parseInt(t.fundingTime)
-        };
-        return acc;
-    }, {});
+    for (const domain of OKX_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/api/v5/public/funding-rate-current?instType=SWAP`, {}, 0);
+        if (res && res.data) {
+            return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+                acc[t.instId.replace('-USDT-SWAP', '')] = {
+                    funding: parseFloat(t.fundingRate),
+                    nextFundingTime: parseInt(t.fundingTime)
+                };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All OKX funding domains failed.`);
+    return {};
 }
 async function getBitgetFuturesTickers() {
     const res = await fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
     if (!res || !res.data) return {};
     return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPr), funding: parseFloat(t.fundingRate) };
+        acc[t.symbol.replace('USDT', '')] = {
+            price: parseFloat(t.lastPr),
+            funding: parseFloat(t.fundingRate),
+            nextFundingTime: parseInt(t.nextFundingTime)
+        };
         return acc;
     }, {});
 }
@@ -243,7 +267,11 @@ async function getGateioFuturesTickers() {
     const list = await fetchJson('https://api.gateio.ws/api/v4/futures/usdt/tickers');
     if (!list) return {};
     return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
-        acc[t.contract.replace('_USDT', '')] = { price: parseFloat(t.last), funding: parseFloat(t.funding_rate) };
+        acc[t.contract.replace('_USDT', '')] = {
+            price: parseFloat(t.last),
+            funding: parseFloat(t.funding_rate),
+            nextFundingTime: parseInt(t.funding_next_apply) * 1000
+        };
         return acc;
     }, {});
 }
