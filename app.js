@@ -18,7 +18,7 @@
   
   // CORS 우회용 프록시 후보군 (순차적 시도)
   // 고래 추적 설정
-  const WHALE_THRESHOLD_USD = 2000; // 100만 달러 이상 감지
+  const WHALE_THRESHOLD_USD = 100000; // 100만 달러 이상 감지
   const PROXY_CANDIDATES = [
     url => 'https://corsproxy.io/?' + encodeURIComponent(url),
     url => '/api/proxy?url=' + encodeURIComponent(url), // Vercel 서버리스 함수

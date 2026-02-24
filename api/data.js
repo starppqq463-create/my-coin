@@ -20,19 +20,64 @@ const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?
 const cache = { kimchi: null, funbi: null };
 const CACHE_TTL = 2000; // 2초
 
+// app.js에서 가져온 상수 및 함수 (서버 환경 최적화용)
+const MAX_MARKETS_PER_REQUEST = 150;
+const MAIN_SYMBOLS = [
+  'BTC', 'ETH', 'XRP', 'SOL', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC', 'UNI', 'ATOM',
+  'LTC', 'BCH', 'ETC', 'XLM', 'ALGO', 'NEAR', 'FIL', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI',
+  'TIA', 'STX', 'IMX', 'RUNE', 'AAVE', 'MKR', 'CRV', 'SNX', 'SAND', 'MANA', 'AXS', 'THETA',
+  'FTM', 'HBAR', 'VET', 'ICP', 'GRT', 'RNDR', 'PEPE', 'WIF', 'BONK', 'FLOKI', 'SHIB',
+  'TRX', 'BSV', 'EOS', 'XTZ', 'KAVA', 'ZEC', 'DASH', 'COMP', 'YFI', 'SUSHI', '1INCH',
+  'LDO', 'ENS', 'BLUR', 'PIXEL', 'STRK', 'W', 'JUP', 'PYTH', 'JTO', 'DYM', 'TNSR', 'PORTAL',
+  'ORDI', 'SATS', 'RATS', 'MOVR', 'KSM', 'CELO', 'ONE', 'ZIL', 'FLOW', 'KLAY',
+  'WAVES', 'CHZ', 'ENJ', 'BAT', 'ZRX', 'OMG', 'SKL', 'ANKR', 'C98', 'GALA', 'APE', 'GMT',
+  'AR', 'STRAX', 'LSK', 'SC', 'SCRL', 'STEEM', 'STORJ', 'DGB', 'BTG', 'QTUM', 'ICX', 'KAIA',
+  'MEW', 'TURBO', 'ATH', 'ZK', 'BLAST', 'UXLINK', 'AVAIL', 'BANANA', 'RENDER', 'LISTA',
+  'ZETA', 'OMNI', 'SAGA', 'ENA', 'ETHFI', 'AXL', 'MANTA', 'XAI', 'AI', 'NFP', 'ACE', 'GLMR', 'CRO', 'DOOD',
+  'VANRY', 'MEME', 'TOKEN', 'NTRN', 'BIGTIME', 'HIFI', 'CYBER', 'MAV', 'EDU', 'MINA',
+  'MASK', 'KDA', 'JOE', 'ACH', 'FXS', 'BNT', 'BAL', 'REN', 'NU', 'PDA', 'PCI', 'MED',
+  'AERGO', 'ORBS', 'TFUEL', 'AMO', 'ELF', 'KNC', 'LRC', 'GLM', 'WAXP', 'POWR', 'SNT', 'CVC',
+  'MTL', 'IOST', 'NMR', 'RLC', 'UOS', 'BEL', 'OBSR', 'POLA', 'ADP', 'GHX', 'CBK', 'MVC',
+  'BLY', 'BIOT', 'GRACY', 'OXT', 'MAPO', 'AQT', 'WIKEN', 'CTSI', 'LPT', 'PUNDIX', 'CELR',
+  'BFC', 'ALICE', 'OGN', 'CTC', 'CKB', 'SXP', 'COS', 'EL', 'HIVE', 'XPR', 'EGG', 'BORA',
+  'ARPA', 'FCT2', 'MOG', 'BRETT', 'POPCAT', 'NEIRO', 'DEGEN', 'TOSHI', 'BOME', 'MOTHER',
+  'ARKM', 'ALT', 'LAYER', 'ID', 'STG', 'ASTR', 'PENDLE', 'GLMR', 'ONDO', 'POL', 'EIGEN', 'BEAM',
+  'ZRO', 'IO', 'GRASS', 'DRIFT', 'CLOUD', 'SAFE', 'AEVO', 'G', 'TAO'
+];
+
+function buildMarketBatch(allMarkets) {
+    const allMarketsSet = new Set(allMarkets);
+    const orderedMarkets = [];
+    for (const symbol of MAIN_SYMBOLS) {
+        const market = `KRW-${symbol}`;
+        if (allMarketsSet.has(market)) {
+            orderedMarkets.push(market);
+            allMarketsSet.delete(market);
+        }
+    }
+    orderedMarkets.push(...Array.from(allMarketsSet));
+    return orderedMarkets.slice(0, MAX_MARKETS_PER_REQUEST);
+}
+
 // 서버 내에서 사용할 데이터 요청 함수
-async function fetchJson(url, options = {}) {
-    try {
-        const response = await axios({
-            method: options.method || 'GET',
-            url: url,
-            data: options.data,
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json' },
-            timeout: 8000
-        });
-        return response.data;
-    } catch (error) {
-        return null;
+async function fetchJson(url, options = {}, retries = 1) {
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const response = await axios({
+                method: options.method || 'GET',
+                url: `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, // 캐시 방지
+                data: options.data,
+                headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                timeout: 8000 // 8초 타임아웃
+            });
+            return response.data;
+        } catch (error) {
+            if (i === retries) {
+                console.error(`[API] Fetch failed after ${retries + 1} attempts for ${url}: ${error.message}`);
+                return null;
+            }
+            await new Promise(res => setTimeout(res, 500)); // 재시도 전 0.5초 대기
+        }
     }
 }
 
@@ -48,7 +93,7 @@ async function getUpbitMarkets() {
 }
 async function getUpbitTickers(markets) {
     if (!markets || !markets.length) return [];
-    return await fetchJson(UPBIT_TICKER_URL + markets.join(','));
+    return await fetchJson(UPBIT_TICKER_URL + markets.join(',')); // fetchJson이 캐시 방지 처리
 }
 async function getBithumbTickers() {
     const res = await fetchJson(BITHUMB_TICKER_URL);
@@ -83,13 +128,32 @@ async function getOkxTickers() {
     }, {});
 }
 async function getHyperliquidTickers() {
-    const data = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', data: { type: 'metaAndAssetCtxs' } });
-    if (!Array.isArray(data) || data.length < 2 || !data[0].universe) return {};
     const combined = {};
-    data[0].universe.forEach((u, i) => {
-        const ctx = data[1][i];
-        if (u.name && ctx) combined[u.name] = { spot: parseFloat(ctx.oraclePx), perp: parseFloat(ctx.markPx), funding: parseFloat(ctx.funding) };
-    });
+    try {
+        const spotRes = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', data: { type: 'metaAndAssetCtxs' } });
+        if (Array.isArray(spotRes) && spotRes.length >= 2 && spotRes[0] && Array.isArray(spotRes[0].universe) && Array.isArray(spotRes[1])) {
+            const universe = spotRes[0].universe;
+            const ctxs = spotRes[1];
+            universe.forEach((u, i) => {
+                const ctx = ctxs[i];
+                if (u.name && ctx) {
+                    if (!combined[u.name]) combined[u.name] = {};
+                    combined[u.name].spot = parseFloat(ctx.oraclePx);
+                    combined[u.name].funding = parseFloat(ctx.funding);
+                }
+            });
+        }
+    } catch (e) { /* 에러는 fetchJson에서 로깅 */ }
+
+    try {
+        const perpRes = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', data: { type: 'allMids' } });
+        if (perpRes) {
+            for (const [key, val] of Object.entries(perpRes)) {
+                if (!combined[key]) combined[key] = {};
+                combined[key].perp = parseFloat(val);
+            }
+        }
+    } catch (e) { /* 에러는 fetchJson에서 로깅 */ }
     return combined;
 }
 async function getGateioTickers() {
@@ -158,52 +222,56 @@ module.exports = async (req, res) => {
         return res.status(200).json(cache.kimchi);
     }
 
-    // 모든 데이터를 병렬로 요청
-    const results = await Promise.allSettled([
-        getExchangeRate(),
-        getUpbitMarkets(),
-        getBithumbTickers(),
-        getBinanceTickers(),
-        getBybitTickers(),
-        getOkxTickers(),
-        getBitgetTickers(),
-        getGateioTickers(),
-        getHyperliquidTickers(),
-        getBinanceFuturesTickers(),
-        getBybitFuturesTickers(),
-        getOkxFuturesTickers(),
-        getBitgetFuturesTickers(),
-        getGateioFuturesTickers()
-    ]);
+    try {
+        // 1. 업비트 전체 마켓 목록을 먼저 가져옴
+        const allUpbitMarkets = await getUpbitMarkets();
+        const upbitMarketBatch = buildMarketBatch(allUpbitMarkets);
 
-    const getValue = (result, defaultValue) => result.status === 'fulfilled' ? result.value : defaultValue;
+        // 2. 모든 거래소 데이터를 병렬로 요청
+        const results = await Promise.allSettled([
+            getExchangeRate(),
+            getUpbitTickers(upbitMarketBatch),
+            getBithumbTickers(),
+            getBinanceTickers(),
+            getBybitTickers(),
+            getOkxTickers(),
+            getBitgetTickers(),
+            getGateioTickers(),
+            getHyperliquidTickers(),
+            getBinanceFuturesTickers(),
+            getBybitFuturesTickers(),
+            getOkxFuturesTickers(),
+            getBitgetFuturesTickers(),
+            getGateioFuturesTickers()
+        ]);
 
-    // 업비트 마켓 목록을 먼저 가져와야 함
-    const upbitMarkets = getValue(results[1], []);
-    const upbitTickersResult = await Promise.allSettled([getUpbitTickers(upbitMarkets)]);
+        const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
 
-    // 최종 데이터 취합
-    const allData = {
-        rate: getValue(results[0], 1350),
-        upbitTickers: getValue(upbitTickersResult[0], []),
-        bithumbMap: getValue(results[2], {}),
-        binanceMap: getValue(results[3], {}),
-        bybitMap: getValue(results[4], {}),
-        okxMap: getValue(results[5], {}),
-        bitgetMap: getValue(results[6], {}),
-        gateMap: getValue(results[7], {}),
-        hyperliquidMap: getValue(results[8], {}),
-        binanceFuturesMap: getValue(results[9], {}),
-        bybitFuturesMap: getValue(results[10], {}),
-        okxFuturesMap: getValue(results[11], {}),
-        bitgetFuturesMap: getValue(results[12], {}),
-        gateioFuturesMap: getValue(results[13], {}),
-    };
+        // 최종 데이터 취합
+        const allData = {
+            rate: getValue(results[0], 1350),
+            upbitTickers: getValue(results[1], []),
+            bithumbMap: getValue(results[2], {}),
+            binanceMap: getValue(results[3], {}),
+            bybitMap: getValue(results[4], {}),
+            okxMap: getValue(results[5], {}),
+            bitgetMap: getValue(results[6], {}),
+            gateMap: getValue(results[7], {}),
+            hyperliquidMap: getValue(results[8], {}),
+            binanceFuturesMap: getValue(results[9], {}),
+            bybitFuturesMap: getValue(results[10], {}),
+            okxFuturesMap: getValue(results[11], {}),
+            bitgetFuturesMap: getValue(results[12], {}),
+            gateioFuturesMap: getValue(results[13], {}),
+        };
 
-    // 캐시에 저장
-    cache.kimchi = allData;
-    cache.kimchiTimestamp = now;
+        cache.kimchi = allData;
+        cache.kimchiTimestamp = now;
 
-    res.setHeader('X-Vercel-Cache', 'MISS');
-    res.status(200).json(allData);
+        res.setHeader('X-Vercel-Cache', 'MISS');
+        res.status(200).json(allData);
+    } catch (error) {
+        console.error('[API] Main handler failed:', error);
+        res.status(500).json({ error: 'Failed to fetch all exchange data.' });
+    }
 };
