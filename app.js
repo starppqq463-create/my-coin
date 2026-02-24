@@ -1299,9 +1299,16 @@
 
   function load() {
     const tbody = $('#table-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오는 중... (서버 API 우선 시도)</td></tr>';
 
     // [개선] 모든 데이터를 한 번에 가져오는 통합 API 호출
-    fetch('/api/data').then(res => res.json()).then(data => {
+    fetch('/api/data')
+    .then(res => {
+        if (!res.ok) throw new Error('Server API failed with status: ' + res.status);
+        return res.json();
+    })
+    .then(data => {
+      console.log('Loaded data from server API');
       krwPerUsd = data.rate;
       setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
       
@@ -1312,9 +1319,39 @@
       if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
       applySortAndFilter();
     }).catch(err => {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오지 못했습니다. 새로고침해 주세요.</td></tr>';
-      setMeta(krwPerUsd, null);
-      console.error(err);
+      console.warn('Server API failed, falling back to client-side fetching.', err);
+      if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">서버 API 실패. 클라이언트 모드로 전환하여 데이터를 불러오는 중...</td></tr>';
+
+      // Fallback to client-side fetching
+      Promise.all([
+          getExchangeRate(),
+          getUpbitMarkets().then(buildMarketBatch).then(getUpbitTickers),
+          getBithumbTickers(),
+          getBinanceTickers(),
+          getBybitTickers(),
+          getOkxTickers(),
+          getBitgetTickers(),
+          getGateioTickers(),
+          getHyperliquidTickers(),
+          getBinanceFuturesTickers(),
+          getBybitFuturesTickers(),
+          getOkxFuturesTickers(),
+          getBitgetFuturesTickers(),
+          getGateioFuturesTickers()
+      ]).then(([rate, upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap]) => {
+          krwPerUsd = rate;
+          setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
+          allRows = buildRows(upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap);
+          
+          $$('.data-table th[data-sort]').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+          const th = $(`.data-table th[data-sort="${sortKey}"]`);
+          if (th) th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+          applySortAndFilter();
+      }).catch(fallbackErr => {
+          if (tbody) tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오지 못했습니다. 새로고침해 주세요.</td></tr>';
+          setMeta(krwPerUsd, null);
+          console.error('Client-side fallback also failed:', fallbackErr);
+      });
     });
   }
 
