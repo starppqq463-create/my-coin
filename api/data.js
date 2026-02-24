@@ -11,6 +11,11 @@ const EXCHANGE_RATE_URL = 'https://api.manana.kr/exchange/rate/KRW/KRW,USD.json'
 const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 const BINANCE_FUNDING_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';
 const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP';
+
+// [개선] 안정성을 위해 API 도메인 목록화
+const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.com', 'api3.binance.com'];
+const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
+const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
 const OKX_DOMAINS = ['www.okx.com', 'aws.okx.com'];
 
 // 캐시 저장소 및 유효 시간
@@ -205,14 +210,6 @@ async function getBitgetTickers() {
         return acc;
     }, {});
 }
-async function getGateioTickers() {
-    const list = await fetchJson(GATEIO_TICKER_URL);
-    if (!list) return {};
-    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
-        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
-        return acc;
-    }, {});
-}
 
 // 메인 핸들러
 module.exports = async (req, res) => {
@@ -233,17 +230,13 @@ module.exports = async (req, res) => {
             getExchangeRate(),
             getUpbitTickers(upbitMarketBatch),
             getBithumbTickers(),
-            Promise.resolve(null), // Binance Spot (Client)
-            Promise.resolve(null), // Bybit Spot (Client)
             getOkxTickers(),
             getBitgetTickers(),
             getGateioTickers(),
             getHyperliquidTickers(),
             getOkxFuturesTickers(),
             getBitgetFuturesTickers(),
-            getGateioFuturesTickers(),
-            getBinanceFundingRates(), // 펀딩비 추가
-            getOkxFundingRates()      // 펀딩비 추가
+            getGateioFuturesTickers()
         ]);
 
         const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
@@ -255,15 +248,32 @@ module.exports = async (req, res) => {
             bithumbMap: getValue(results[2], {}),
             binanceMap: {},
             bybitMap: {},
-            okxMap: getValue(results[3], {}),
-            bitgetMap: getValue(results[4], {}),
-            gateMap: getValue(results[5], {}),
-            hyperliquidMap: getValue(results[6], {}),
+            okxMap: getValue(results[5], {}),
+            bitgetMap: getValue(results[6], {}),
+            gateMap: getValue(results[7], {}),
+            hyperliquidMap: getValue(results[8], {}),
             binanceFuturesMap: {},
             bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[7], {}),
-            bitgetFuturesMap: getValue(results[8], {}),
-            gateioFuturesMap: getValue(results[9], {})
+            okxFuturesMap: getValue(results[9], {}),
+            bitgetFuturesMap: getValue(results[10], {}),
+            gateioFuturesMap: getValue(results[11], {})
+        };
+
+        // 펀딩비 데이터 병합
+        const binanceFunding = getValue(results[12], {});
+        const okxFunding = getValue(results[13], {});
+
+        for (const symbol in binanceFunding) {
+            if (allData.binanceFuturesMap[symbol]) {
+                allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
+                allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
+            }
+        }
+        for (const symbol in okxFunding) {
+            if (allData.okxFuturesMap[symbol]) {
+                allData.okxFuturesMap[symbol].funding = okxFunding[symbol].funding;
+                allData.okxFuturesMap[symbol].nextFundingTime = okxFunding[symbol].nextFundingTime;
+            }
         }
 
         cache.kimchi = allData;
