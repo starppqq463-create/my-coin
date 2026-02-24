@@ -3,6 +3,17 @@
 
   // URL 상수 (직접 호출 방식으로 변경)
   const UPBIT_MARKETS_URL = 'https://api.upbit.com/v1/market/all?isDetails=false';
+  const UPBIT_TICKER_URL = 'https://api.upbit.com/v1/ticker?markets=';
+  const BITHUMB_TICKER_URL = 'https://api.bithumb.com/public/ticker/ALL_KRW';
+  const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
+  const BYBIT_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=spot';
+  const OKX_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SPOT';
+  const HYPERLIQUID_TICKER_URL = 'https://api.hyperliquid.xyz/info';
+  const GATEIO_TICKER_URL = 'https://api.gateio.ws/api/v4/spot/tickers';
+  const EXCHANGE_RATE_URL = 'https://api.manana.kr/exchange/rate/KRW/KRW,USD.json';
+  const BINANCE_FUTURES_TICKER_URL = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
+  const BYBIT_FUTURES_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=linear';
+  const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 
   // 고래 추적 설정
   const WHALE_THRESHOLD_USD = 100000; // 100만 달러 이상 감지
@@ -192,6 +203,145 @@
     if (n == null || isNaN(n)) return '-';
     const s = Number(n).toFixed(2);
     return (Number(n) >= 0 ? '+' : '') + s + '%';
+  }
+
+  // --- 데이터 요청 함수 (클라이언트 사이드) ---
+  async function fetchJson(url, options = {}) {
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error(`Fetch failed for ${url}:`, e);
+      // CORS 에러가 발생하면 사용자에게 안내
+      if (e instanceof TypeError) {
+        const tbody = $('#table-body');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">CORS 오류 발생! 브라우저 확장 프로그램(CORS Unblock 등)을 설치하고 활성화해주세요.</td></tr>`;
+      }
+      throw e;
+    }
+  }
+
+  function getExchangeRate() {
+    return fetchJson(EXCHANGE_RATE_URL).then(data => {
+      const item = Array.isArray(data) ? data.find(d => d.name === 'USDKRW=X') : null;
+      return (item && item.rate) ? item.rate : 1350;
+    }).catch(() => 1350);
+  }
+
+  function getUpbitTickers(markets) {
+    if (!markets.length) return Promise.resolve([]);
+    return fetchJson(UPBIT_TICKER_URL + markets.join(','));
+  }
+
+  function getBithumbTickers() {
+    return fetchJson(BITHUMB_TICKER_URL).then(res => {
+      const data = res.data || {};
+      return Object.keys(data).reduce((acc, key) => {
+        if (key !== 'date') acc[key] = parseFloat(data[key].closing_price);
+        return acc;
+      }, {});
+    }).catch(() => ({}));
+  }
+
+  function getBinanceTickers() {
+    return fetchJson(BINANCE_TICKER_URL).then(list =>
+      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getBybitTickers() {
+    return fetchJson(BYBIT_TICKER_URL).then(res =>
+      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getOkxTickers() {
+    return fetchJson(OKX_TICKER_URL).then(res =>
+      (res.data || []).filter(t => t.instId.endsWith('-USDT')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT', '')] = parseFloat(t.last);
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  async function getHyperliquidTickers() {
+    const combined = {};
+    try {
+      const data = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'metaAndAssetCtxs' }) });
+      if (Array.isArray(data) && data.length >= 2 && data[0] && Array.isArray(data[0].universe)) {
+        data[0].universe.forEach((u, i) => {
+          const ctx = data[1][i];
+          if (u.name && ctx) {
+            if (!combined[u.name]) combined[u.name] = {};
+            combined[u.name].spot = parseFloat(ctx.oraclePx);
+            combined[u.name].funding = parseFloat(ctx.funding);
+          }
+        });
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      const perpRes = await fetchJson(HYPERLIQUID_TICKER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'allMids' }) });
+      if (perpRes) {
+        for (const [key, val] of Object.entries(perpRes)) {
+          if (!combined[key]) combined[key] = {};
+          combined[key].perp = parseFloat(val);
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return combined;
+  }
+
+  function getGateioTickers() {
+    return fetchJson(GATEIO_TICKER_URL).then(list =>
+      list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getBitgetTickers() {
+    return fetchJson('https://api.bitget.com/api/v2/spot/market/tickers').then(res =>
+      (res.data || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  // --- 선물 데이터 ---
+  function getBinanceFuturesTickers() {
+    return fetchJson(BINANCE_FUTURES_TICKER_URL).then(list =>
+      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getBybitFuturesTickers() {
+    return fetchJson(BYBIT_FUTURES_TICKER_URL).then(res =>
+      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getOkxFuturesTickers() {
+    return fetchJson(OKX_FUTURES_TICKER_URL).then(res =>
+      (res.data || []).filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT-SWAP', '')] = { price: parseFloat(t.last) };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
   }
 
   async function getUpbitMarkets() {
