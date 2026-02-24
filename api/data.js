@@ -230,13 +230,13 @@ module.exports = async (req, res) => {
             getExchangeRate(),
             getUpbitTickers(upbitMarketBatch),
             getBithumbTickers(),
-            getOkxTickers(),
-            getBitgetTickers(),
-            getGateioTickers(),
+            getOkxTickers(), // 3
+            getBitgetTickers(), // 4
+            getGateioTickers(), // 5
             getHyperliquidTickers(),
             getOkxFuturesTickers(),
             getBitgetFuturesTickers(),
-            getGateioFuturesTickers()
+            getGateioFuturesTickers() // 9
         ]);
 
         const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
@@ -248,32 +248,15 @@ module.exports = async (req, res) => {
             bithumbMap: getValue(results[2], {}),
             binanceMap: {},
             bybitMap: {},
-            okxMap: getValue(results[5], {}),
-            bitgetMap: getValue(results[6], {}),
-            gateMap: getValue(results[7], {}),
-            hyperliquidMap: getValue(results[8], {}),
+            okxMap: getValue(results[3], {}),
+            bitgetMap: getValue(results[4], {}),
+            gateMap: getValue(results[5], {}),
+            hyperliquidMap: getValue(results[6], {}),
             binanceFuturesMap: {},
             bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[9], {}),
-            bitgetFuturesMap: getValue(results[10], {}),
-            gateioFuturesMap: getValue(results[11], {})
-        };
-
-        // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[12], {});
-        const okxFunding = getValue(results[13], {});
-
-        for (const symbol in binanceFunding) {
-            if (allData.binanceFuturesMap[symbol]) {
-                allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
-                allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
-            }
-        }
-        for (const symbol in okxFunding) {
-            if (allData.okxFuturesMap[symbol]) {
-                allData.okxFuturesMap[symbol].funding = okxFunding[symbol].funding;
-                allData.okxFuturesMap[symbol].nextFundingTime = okxFunding[symbol].nextFundingTime;
-            }
+            okxFuturesMap: getValue(results[7], {}),
+            bitgetFuturesMap: getValue(results[8], {}),
+            gateioFuturesMap: getValue(results[9], {})
         }
 
         cache.kimchi = allData;
