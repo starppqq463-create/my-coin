@@ -103,7 +103,7 @@
     .section.active { display: block; }
 
     /* 테이블 */
-    .table-wrap { overflow-x: auto; background: var(--bg-card); border-radius: 0; border: none; height: calc(100vh - 260px); min-height: 400px; overflow-y: auto; }
+    .table-wrap { overflow-x: auto; background: var(--bg-card); border-radius: 0; border: none; max-height: 75vh; overflow-y: auto; }
     .data-table { width: 100%; border-collapse: collapse; white-space: nowrap; }
     
     .data-table th {
@@ -183,26 +183,12 @@
     .new-row { animation: flash 1s ease-out; }
 
     /* 실시간 가격 업데이트 강조 */
-    @keyframes price-up-flash {
-      from { background-color: rgba(22, 163, 74, 0.4); } /* Green */
+    @keyframes price-flash {
+      from { background-color: rgba(240, 185, 11, 0.4); }
       to { background-color: transparent; }
     }
-    @keyframes price-down-flash {
-      from { background-color: rgba(220, 38, 38, 0.4); } /* Red */
-      to { background-color: transparent; }
-    }
-    .price-up-flash {
-      animation: price-up-flash 1s ease-out;
-    }
-    .price-down-flash {
-      animation: price-down-flash 1s ease-out;
-    }
-    /* Ensure the price value itself is the target for animation */
-    .price-value {
-      display: inline-block; /* Required for background animation on span */
-      padding: 0 2px; /* Small padding to make background visible */
-      border-radius: 2px;
-      transition: background-color 0.1s; /* Smooth transition when removing class */
+    .price-flash {
+      animation: price-flash 0.7s ease-out;
     }
 
     /* 페이지네이션 */
