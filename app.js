@@ -656,30 +656,34 @@
     const tbody = $('#funbi-table-body');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">펀딩비 데이터를 불러오는 중...</td></tr>';
     
-    // 모든 펀딩비 데이터를 서버에서 가져옴
-    fetch('/api/data').then(async res => {
-        if (!res.ok) throw new Error(`Server Error: ${res.status}`);
-        return res.json();
-    }).then(data => {
+    // 모든 펀딩비 데이터를 클라이언트에서 직접 가져옴
+    Promise.all([
+      getBinanceFundingRates(),
+      getBybitFuturesTickers(), // { price, funding, nextFundingTime } 반환
+      getOkxFundingRates(),
+      getBitgetFuturesTickers(),
+      getGateioFuturesTickers(),
+      getHyperliquidTickers()
+    ]).then(([binanceFundingMap, bybitFuturesMap, okxFundingMap, bitgetFuturesMap, gateioFuturesMap, hyperliquidMap]) => {
       if (funbiTimer) clearInterval(funbiTimer);
 
       // 김프 비교 목록(allRows)과 동일한 코인만 표시
       const targetList = allRows.length > 0 ? allRows : [];
       
       // 다음 펀딩 시간 설정
-      standardNextFundingTime = data.bybitFuturesMap['BTC'] ? data.bybitFuturesMap['BTC'].nextFundingTime : null;
+      standardNextFundingTime = bybitFuturesMap['BTC'] ? bybitFuturesMap['BTC'].nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
       
       funbiRows = targetList.map(row => {
         const sym = row.name;
         return {
           name: sym,
-          binance: data.binanceFuturesMap?.[sym]?.funding ?? null,
-          bybit: data.bybitFuturesMap?.[sym]?.funding ?? null,
-          okx: data.okxFuturesMap?.[sym]?.funding ?? null,
-          bitget: data.bitgetFuturesMap?.[sym]?.funding ?? null,
-          gate: data.gateioFuturesMap?.[sym]?.funding ?? null,
-          hyperliquid: data.hyperliquidMap?.[sym]?.funding ?? null
+          binance: binanceFundingMap[sym]?.rate ?? null,
+          bybit: bybitFuturesMap[sym]?.funding ?? null,
+          okx: okxFundingMap[sym]?.rate ?? null,
+          bitget: bitgetFuturesMap[sym]?.funding ?? null,
+          gate: gateioFuturesMap[sym]?.funding ?? null,
+          hyperliquid: hyperliquidMap[sym]?.funding ?? null
         };
       }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || r.hyperliquid != null);
       
@@ -1337,70 +1341,58 @@
 
   async function initKimchiPremium() {
     const tbody = $('#table-body');
-    tbody.innerHTML = '<tr><td colspan="17" class="loading">서버에서 데이터를 가져오는 중...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" class="loading">데이터를 불러오는 중... (CORS 확장 프로그램 활성화 필요)</td></tr>';
     try {
-      // 1. 서버 데이터 (Upbit, Bithumb, OKX 등)와 클라이언트 데이터 (Binance, Bybit) 병렬 요청
-      const [serverData, binanceMap, bybitMap, binanceFuturesMap, bybitFuturesMap] = await Promise.all([
-        fetch('/api/data').then(async res => {
-            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
-            return res.json();
-        }),
-        getBinanceTickers(),       // 내 컴퓨터에서 직접 요청
-        getBybitTickers(),         // 내 컴퓨터에서 직접 요청
-        getBinanceFuturesTickers(),// 내 컴퓨터에서 직접 요청
-        getBybitFuturesTickers()   // 내 컴퓨터에서 직접 요청
+      const upbitMarkets = await getUpbitMarkets();
+      const marketBatch = buildMarketBatch(upbitMarkets);
+
+      const [rate, upbitTickers, bithumbMap, binanceMap, bybitMap, okxMap, bitgetMap, gateMap, hyperliquidMap, binanceFuturesMap, bybitFuturesMap, okxFuturesMap, bitgetFuturesMap, gateioFuturesMap] = await Promise.all([
+        getExchangeRate(),
+        getUpbitTickers(marketBatch),
+        getBithumbTickers(),
+        getBinanceTickers(),
+        getBybitTickers(),
+        getOkxTickers(),
+        getBitgetTickers(),
+        getGateioTickers(),
+        getHyperliquidTickers(),
+        getBinanceFuturesTickers(),
+        getBybitFuturesTickers(),
+        getOkxFuturesTickers(),
+        getBitgetFuturesTickers(),
+        getGateioFuturesTickers()
       ]);
 
-      // 2. 데이터 병합
-      const data = serverData;
-      data.binanceMap = binanceMap;
-      data.bybitMap = bybitMap;
-      data.binanceFuturesMap = binanceFuturesMap;
-      data.bybitFuturesMap = bybitFuturesMap;
+      krwPerUsd = rate;
+      setMeta(rate, new Date().toLocaleTimeString('ko-KR'));
 
-      // 3. 스냅샷 데이터로 테이블 채우기
-      krwPerUsd = data.rate;
-      setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
+      allRows = upbitTickers.map(t => {
+        const symbol = t.market.replace('KRW-', '');
+        const binanceData = binanceMap[symbol] || {};
+        const hasOverseasPrice = binanceMap[symbol] || bybitMap[symbol] || okxMap[symbol] || bitgetMap[symbol] || gateMap[symbol] || hyperliquidMap[symbol] || binanceFuturesMap[symbol] || bybitFuturesMap[symbol] || okxFuturesMap[symbol] || bitgetFuturesMap[symbol] || gateioFuturesMap[symbol];
+        if (!hasOverseasPrice) return null;
 
-      if (!data.upbitTickers) throw new Error("서버 데이터 형식 오류 (upbitTickers missing)");
+        return {
+          name: symbol,
+          upbit: t.trade_price,
+          bithumb: bithumbMap[symbol] ?? null,
+          binance: binanceData.price ?? null,
+          bybit: bybitMap[symbol] ?? null,
+          okx: okxMap[symbol] ?? null,
+          bitget: bitgetMap[symbol] ?? null,
+          gate: gateMap[symbol] ?? null,
+          hyperliquid_spot: hyperliquidMap[symbol]?.spot ?? null,
+          binance_perp: binanceFuturesMap[symbol]?.price ?? null,
+          bybit_perp: bybitFuturesMap[symbol]?.price ?? null,
+          okx_perp: okxFuturesMap[symbol]?.price ?? null,
+          bitget_perp: bitgetFuturesMap[symbol]?.price ?? null,
+          gate_perp: gateioFuturesMap[symbol]?.price ?? null,
+          hyperliquid_perp: hyperliquidMap[symbol]?.perp ?? null,
+          change: binanceData.change ?? (t.signed_change_rate * 100),
+          volume: binanceData.volume ?? t.acc_trade_price_24h,
+        };
+      }).filter(Boolean);
 
-      const upbitMap = data.upbitTickers.reduce((acc, t) => {
-        acc[t.market.replace('KRW-', '')] = t;
-        return acc;
-      }, {});
-
-      const marketBatch = data.upbitTickers.map(t => t.market);
-      const matchedRows = [];
-
-      marketBatch.forEach(market => {
-        const symbol = market.replace('KRW-', '');
-        const upbitData = upbitMap[symbol];
-        const hasOverseasPrice = data.binanceMap[symbol] || data.bybitMap[symbol] || data.okxMap[symbol] || data.bitgetMap[symbol] || data.gateMap[symbol] || data.hyperliquidMap[symbol];
-
-        if (hasOverseasPrice && upbitData) {
-          matchedRows.push({
-            name: symbol,
-            change: upbitData.signed_change_rate != null ? upbitData.signed_change_rate * 100 : null,
-            volume: upbitData.acc_trade_price_24h,
-            upbit: upbitData.trade_price,
-            bithumb: data.bithumbMap[symbol] ?? null,
-            binance: data.binanceMap[symbol]?.price ?? null,
-            bybit: data.bybitMap[symbol] ?? null,
-            okx: data.okxMap[symbol] ?? null,
-            bitget: data.bitgetMap[symbol] ?? null,
-            gate: data.gateMap[symbol] ?? null,
-            hyperliquid_spot: data.hyperliquidMap[symbol]?.spot ?? null,
-            binance_perp: data.binanceFuturesMap[symbol]?.price ?? null,
-            bybit_perp: data.bybitFuturesMap[symbol]?.price ?? null,
-            okx_perp: data.okxFuturesMap[symbol]?.price ?? null,
-            bitget_perp: data.bitgetFuturesMap[symbol]?.price ?? null,
-            gate_perp: data.gateioFuturesMap[symbol]?.price ?? null,
-            hyperliquid_perp: data.hyperliquidMap[symbol]?.perp ?? null,
-          });
-        }
-      });
-
-      allRows = matchedRows;
       applySortAndFilter(); // 전체 데이터로 다시 렌더링
 
       // 3. 웹소켓 연결하여 실시간 업데이트 시작
