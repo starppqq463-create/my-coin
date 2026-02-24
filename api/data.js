@@ -4,17 +4,18 @@ const axios = require('axios');
 const UPBIT_TICKER_URL = 'https://api.upbit.com/v1/ticker?markets=';
 const UPBIT_MARKETS_URL = 'https://api.upbit.com/v1/market/all?isDetails=false';
 const BITHUMB_TICKER_URL = 'https://api.bithumb.com/public/ticker/ALL_KRW';
-const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/24hr';
-const BYBIT_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=spot';
 const OKX_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SPOT';
 const HYPERLIQUID_TICKER_URL = 'https://api.hyperliquid.xyz/info';
 const GATEIO_TICKER_URL = 'https://api.gateio.ws/api/v4/spot/tickers';
 const EXCHANGE_RATE_URL = 'https://api.manana.kr/exchange/rate/KRW/KRW,USD.json';
-const BINANCE_FUTURES_TICKER_URL = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
-const BYBIT_FUTURES_TICKER_URL = 'https://api.bybit.com/v5/market/tickers?category=linear';
 const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 const BINANCE_FUNDING_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';
 const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP';
+
+// [개선] 안정성을 위해 API 도메인 목록화
+const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.com', 'api3.binance.com'];
+const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
+const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
 
 // 캐시 저장소 및 유효 시간
 const cache = { kimchi: null, funbi: null };
@@ -104,20 +105,30 @@ async function getBithumbTickers() {
     }, {});
 }
 async function getBinanceTickers() {
-    const list = await fetchJson(BINANCE_TICKER_URL);
-    if (!list) return {};
-    return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
-        return acc;
-    }, {});
+    for (const domain of BINANCE_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/api/v3/ticker/24hr`, {}, 0); // 도메인별 1회 시도
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Binance spot domains failed.`);
+    return {};
 }
 async function getBybitTickers() {
-    const res = await fetchJson(BYBIT_TICKER_URL);
-    if (!res || !res.result || !res.result.list) return {};
-    return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-        return acc;
-    }, {});
+    for (const domain of BYBIT_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
+        if (res && res.result && res.result.list) {
+            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Bybit spot domains failed.`);
+    return {};
 }
 async function getOkxTickers() {
     const res = await fetchJson(OKX_TICKER_URL);
@@ -165,20 +176,30 @@ async function getGateioTickers() {
     }, {});
 }
 async function getBinanceFuturesTickers() {
-    const list = await fetchJson(BINANCE_FUTURES_TICKER_URL);
-    if (!list) return {};
-    return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-        return acc;
-    }, {});
+    for (const domain of BINANCE_FUTURES_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/fapi/v1/ticker/24hr`, {}, 0);
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Binance futures domains failed.`);
+    return {};
 }
 async function getBybitFuturesTickers() {
-    const res = await fetchJson(BYBIT_FUTURES_TICKER_URL);
-    if (!res || !res.result || !res.result.list) return {};
-    return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate) };
-        return acc;
-    }, {});
+    for (const domain of BYBIT_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
+        if (res && res.result && res.result.list) {
+            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate) };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Bybit futures domains failed.`);
+    return {};
 }
 async function getOkxFuturesTickers() {
     const res = await fetchJson(OKX_FUTURES_TICKER_URL);
