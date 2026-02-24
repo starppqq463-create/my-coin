@@ -11,11 +11,6 @@ const EXCHANGE_RATE_URL = 'https://api.manana.kr/exchange/rate/KRW/KRW,USD.json'
 const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 const BINANCE_FUNDING_URL = 'https://fapi.binance.com/fapi/v1/premiumIndex';
 const OKX_FUNDING_URL = 'https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP';
-
-// [개선] 안정성을 위해 API 도메인 목록화
-const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.com', 'api3.binance.com'];
-const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
-const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
 const OKX_DOMAINS = ['www.okx.com', 'aws.okx.com'];
 
 // 캐시 저장소 및 유효 시간
@@ -123,32 +118,6 @@ async function getBithumbTickers() {
         return acc;
     }, {});
 }
-async function getBinanceTickers() {
-    for (const domain of BINANCE_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/api/v3/ticker/24hr`, {}, 0); // 도메인별 1회 시도
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Binance spot domains failed.`);
-    return {};
-}
-async function getBybitTickers() {
-    for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
-        if (res && res.result && res.result.list) {
-            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Bybit spot domains failed.`);
-    return {};
-}
 async function getOkxTickers() {
     for (const domain of OKX_DOMAINS) {
         const res = await fetchJson(`https://${domain}/api/v5/market/tickers?instType=SPOT`, {}, 0);
@@ -191,56 +160,6 @@ async function getHyperliquidTickers() {
     } catch (e) { /* 에러는 fetchJson에서 로깅 */ }
     return combined;
 }
-async function getGateioTickers() {
-    const list = await fetchJson(GATEIO_TICKER_URL);
-    if (!list) return {};
-    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
-        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
-        return acc;
-    }, {});
-}
-async function getBinanceFuturesTickers() {
-    for (const domain of BINANCE_FUTURES_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/fapi/v1/ticker/24hr`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Binance futures domains failed.`);
-    return {};
-}
-async function getBinanceFundingRates() {
-    for (const domain of BINANCE_FUTURES_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/fapi/v1/premiumIndex`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = {
-                    funding: parseFloat(t.lastFundingRate),
-                    nextFundingTime: parseInt(t.nextFundingTime)
-                };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Binance funding domains failed.`);
-    return {};
-}
-async function getBybitFuturesTickers() {
-    for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
-        if (res && res.result && res.result.list) {
-            return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Bybit futures domains failed.`);
-    return {};
-}
 async function getOkxFuturesTickers() {
     for (const domain of OKX_DOMAINS) {
         const res = await fetchJson(`https://${domain}/api/v5/market/tickers?instType=SWAP`, {}, 0);
@@ -252,21 +171,6 @@ async function getOkxFuturesTickers() {
         }
     }
     console.error(`[API] All OKX futures domains failed.`);
-    return {};
-}
-async function getOkxFundingRates() {
-    // OKX 펀딩비는 단일 API로 모든 SWAP 데이터를 가져옴
-    const res = await fetchJson(OKX_FUNDING_URL);
-    if (res && res.data) {
-        return res.data.filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
-            acc[t.instId.replace('-USDT-SWAP', '')] = {
-                funding: parseFloat(t.fundingRate),
-                nextFundingTime: parseInt(t.fundingTime)
-            };
-            return acc;
-        }, {});
-    }
-    console.error(`[API] OKX funding fetch failed.`);
     return {};
 }
 async function getBitgetFuturesTickers() {
@@ -298,6 +202,14 @@ async function getBitgetTickers() {
     if (!res || !res.data) return {};
     return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
         acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
+        return acc;
+    }, {});
+}
+async function getGateioTickers() {
+    const list = await fetchJson(GATEIO_TICKER_URL);
+    if (!list) return {};
+    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
         return acc;
     }, {});
 }
@@ -343,32 +255,15 @@ module.exports = async (req, res) => {
             bithumbMap: getValue(results[2], {}),
             binanceMap: {},
             bybitMap: {},
-            okxMap: getValue(results[5], {}),
-            bitgetMap: getValue(results[6], {}),
-            gateMap: getValue(results[7], {}),
-            hyperliquidMap: getValue(results[8], {}),
+            okxMap: getValue(results[3], {}),
+            bitgetMap: getValue(results[4], {}),
+            gateMap: getValue(results[5], {}),
+            hyperliquidMap: getValue(results[6], {}),
             binanceFuturesMap: {},
             bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[9], {}),
-            bitgetFuturesMap: getValue(results[10], {}),
-            gateioFuturesMap: getValue(results[11], {})
-        };
-
-        // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[12], {});
-        const okxFunding = getValue(results[13], {});
-
-        for (const symbol in binanceFunding) {
-            if (allData.binanceFuturesMap[symbol]) {
-                allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
-                allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
-            }
-        }
-        for (const symbol in okxFunding) {
-            if (allData.okxFuturesMap[symbol]) {
-                allData.okxFuturesMap[symbol].funding = okxFunding[symbol].funding;
-                allData.okxFuturesMap[symbol].nextFundingTime = okxFunding[symbol].nextFundingTime;
-            }
+            okxFuturesMap: getValue(results[7], {}),
+            bitgetFuturesMap: getValue(results[8], {}),
+            gateioFuturesMap: getValue(results[9], {})
         }
 
         cache.kimchi = allData;

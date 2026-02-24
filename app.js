@@ -344,6 +344,56 @@
     ).catch(() => ({}));
   }
 
+  async function getBinanceFundingRates() {
+    return fetchJson('https://fapi.binance.com/fapi/v1/premiumIndex').then(list =>
+      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = {
+            rate: parseFloat(t.lastFundingRate),
+            time: parseInt(t.nextFundingTime)
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  async function getOkxFundingRates() {
+    return fetchJson('https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP').then(res =>
+      (res.data || []).filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
+        acc[t.instId.replace('-USDT-SWAP', '')] = {
+            rate: parseFloat(t.fundingRate),
+            time: parseInt(t.fundingTime)
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  async function getBitgetFuturesTickers() {
+    return fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES').then(res =>
+      (res.data || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = {
+            price: parseFloat(t.lastPr),
+            funding: parseFloat(t.fundingRate),
+            nextFundingTime: parseInt(t.nextFundingTime)
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  async function getGateioFuturesTickers() {
+    return fetchJson('https://api.gateio.ws/api/v4/futures/usdt/tickers').then(list =>
+      list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.contract.replace('_USDT', '')] = {
+            price: parseFloat(t.last),
+            funding: parseFloat(t.funding_rate),
+            nextFundingTime: parseInt(t.funding_next_apply) * 1000
+        };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
   async function getUpbitMarkets() {
     const res = await fetch(UPBIT_MARKETS_URL);
     if (!res.ok) throw new Error('업비트 마켓 목록을 가져올 수 없습니다.');
