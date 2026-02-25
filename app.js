@@ -358,6 +358,31 @@
     } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
   }
 
+  // [추가] Bitget 현물/선물 가격 주기적 폴링 함수 (WebSocket 불안정으로 인한 대체)
+  async function pollBitgetPrices() {
+    try {
+      const spotRes = await fetchJson('https://api.bitget.com/api/v2/spot/market/tickers');
+      if (spotRes && spotRes.data) {
+        spotRes.data.forEach(t => {
+          if (t.symbol.endsWith('USDT') && allRows.some(row => row.name === t.symbol.replace('USDT', ''))) {
+            updateRowData(t.symbol.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
+          }
+        });
+      }
+    } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
+
+    try {
+      const perpRes = await fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
+      if (perpRes && perpRes.data) {
+        perpRes.data.forEach(t => {
+          if (t.symbol.endsWith('USDT') && allRows.some(row => row.name === t.symbol.replace('USDT', ''))) {
+            updateRowData(t.symbol.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
+          }
+        });
+      }
+    } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
+  }
+
   // --- 실시간 데이터 처리 (웹소켓) ---
   function connectWebsockets(markets) {
     const symbols = markets.map(m => m.replace('KRW-', ''));
@@ -369,8 +394,6 @@
     connectBybitFuturesSocket(symbols);
     connectOkxSocket(symbols);
     connectOkxFuturesSocket(symbols);
-    connectBitgetSocket(symbols);
-    connectBitgetFuturesSocket(symbols);
     connectGateioSocket(symbols);
     connectGateioFuturesSocket(symbols);
     connectHyperliquidFuturesSocket(symbols); // Hyperliquid 현물은 실시간 스트림을 지원하지 않아 새로고침 시에만 업데이트됩니다.
@@ -538,89 +561,6 @@
     };
     ws.onclose = () => reconnect(name, () => connectOkxFuturesSocket(symbols));
     setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
-  }
-
-  function connectBitgetSocket(symbols) {
-    const name = 'Bitget';
-    if (sockets[name]) {
-      sockets[name].onclose = null;
-      sockets[name].close();
-    }
-    const ws = new WebSocket('wss://ws.bitget.com/v2/spot/public/tickers');
-    sockets[name] = ws;
-    let pingInterval = null;
-    const cleanup = () => clearInterval(pingInterval);
-
-    ws.onopen = () => {
-        console.log(`${name} 웹소켓 연결 성공`);
-        const args = symbols.map(s => ({ instType: 'SPOT', channel: 'ticker', instId: `${s}USDT` }));
-        // [수정] 한 번에 너무 많은 심볼을 구독하면 연결이 끊길 수 있으므로, 청크로 나누어 순차적으로 보냅니다.
-        const chunkSize = 20;
-        for (let i = 0; i < args.length; i += chunkSize) {
-            const chunk = args.slice(i, i + chunkSize);
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
-                }
-            }, i * 25);
-        }
-        pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
-    };
-    ws.onmessage = (e) => {
-        const res = JSON.parse(e.data);
-        if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
-            res.data.forEach(t => {
-                updateRowData(t.instId.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
-            });
-        }
-    };
-    ws.onclose = () => {
-        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
-        cleanup();
-        setTimeout(() => connectBitgetSocket(symbols), 500);
-    };
-    ws.onerror = () => ws.close();
-  }
-
-  function connectBitgetFuturesSocket(symbols) {
-    const name = 'BitgetFutures';
-    if (sockets[name]) {
-      sockets[name].onclose = null;
-      sockets[name].close();
-    }
-    const ws = new WebSocket('wss://ws.bitget.com/v2/mix/public/tickers');
-    sockets[name] = ws;
-    let pingInterval = null;
-    const cleanup = () => clearInterval(pingInterval);
-
-    ws.onopen = () => {
-        console.log(`${name} 웹소켓 연결 성공`);
-        const args = symbols.map(s => ({ instType: 'USDT-FUTURES', channel: 'ticker', instId: `${s}USDT` }));
-        const chunkSize = 20;
-        for (let i = 0; i < args.length; i += chunkSize) {
-            const chunk = args.slice(i, i + chunkSize);
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
-                }
-            }, i * 25);
-        }
-        pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
-    };
-    ws.onmessage = (e) => {
-        const res = JSON.parse(e.data);
-        if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
-            res.data.forEach(t => {
-                updateRowData(t.instId.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
-            });
-        }
-    };
-    ws.onclose = () => {
-        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
-        cleanup();
-        setTimeout(() => connectBitgetFuturesSocket(symbols), 500);
-    };
-    ws.onerror = () => ws.close();
   }
 
   function connectGateioSocket(symbols) {
@@ -1692,6 +1632,9 @@
 
       // 2초마다 Hyperliquid 현물 가격을 폴링하여 업데이트합니다.
       setInterval(pollHyperliquidSpot, 1000);
+
+      // 2초마다 Bitget 현물/선물 가격을 폴링하여 업데이트합니다.
+      setInterval(pollBitgetPrices, 2000);
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
