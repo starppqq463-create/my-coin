@@ -588,14 +588,37 @@
 
   function connectGateioSocket(symbols) {
     const name = 'Gateio';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null; // 이전 핸들러 제거
+      sockets[name].close();
+    }
+
     const ws = new WebSocket('wss://api.gateio.ws/ws/v4/');
     sockets[name] = ws;
+    let pingInterval = null;
+
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const payload = symbols.map(s => `${s}_USDT`);
-        ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.tickers', event: 'subscribe', payload }));
+
+        // [수정] 한 번에 너무 많은 심볼을 구독하면 연결이 끊길 수 있으므로, 청크로 나누어 순차적으로 보냅니다.
+        const chunkSize = 20;
+        for (let i = 0; i < payload.length; i += chunkSize) {
+            const chunk = payload.slice(i, i + chunkSize);
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.tickers', event: 'subscribe', payload: chunk }));
+                }
+            }, i * 25); // 25ms 간격으로 전송
+        }
+
+        pingInterval = setInterval(() => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
+        }, 9000);
     };
+
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
         if (res.channel === 'spot.tickers' && res.event === 'update' && res.result) {
@@ -603,26 +626,47 @@
             updateRowData(t.currency_pair.replace('_USDT', ''), { gate: parseFloat(t.last) });
         }
     };
+
     ws.onclose = () => {
         console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
-        if (sockets[name]) sockets[name].close();
+        cleanup();
         setTimeout(() => connectGateioSocket(symbols), 500);
     };
-    setInterval(() => {
-        if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
-    }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
+
+    ws.onerror = () => ws.close();
   }
 
   function connectGateioFuturesSocket(symbols) {
     const name = 'GateioFutures';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null; // 이전 핸들러 제거
+      sockets[name].close();
+    }
+
     const ws = new WebSocket('wss://fx-ws.gateio.ws/v4/ws/usdt');
     sockets[name] = ws;
+    let pingInterval = null;
+
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const payload = symbols.map(s => `${s}_USDT`);
-        ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.tickers', event: 'subscribe', payload }));
+        const chunkSize = 20;
+        for (let i = 0; i < payload.length; i += chunkSize) {
+            const chunk = payload.slice(i, i + chunkSize);
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.tickers', event: 'subscribe', payload: chunk }));
+                }
+            }, i * 25);
+        }
+
+        pingInterval = setInterval(() => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
+        }, 9000);
     };
+
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
         if (res.channel === 'futures.tickers' && res.event === 'update' && Array.isArray(res.result)) {
@@ -631,14 +675,13 @@
             });
         }
     };
+
     ws.onclose = () => {
         console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
-        if (sockets[name]) sockets[name].close();
+        cleanup();
         setTimeout(() => connectGateioFuturesSocket(symbols), 500);
     };
-    setInterval(() => {
-        if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
-    }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
+    ws.onerror = () => ws.close();
   }
 
   function connectHyperliquidFuturesSocket(symbols) {
