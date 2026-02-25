@@ -547,7 +547,7 @@
               if (ws.readyState === WebSocket.OPEN) {
                   ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
               }
-          }, (i / chunkSize) * 250); // 선물 구독 요청 간격을 늘려(100ms -> 250ms) 연결 안정성을 확보합니다.
+          }, (i / chunkSize) * 100); // 현물과 동일한 간격(100ms)으로 수정하여 안정성을 확보합니다.
       }
 
       pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
