@@ -495,7 +495,7 @@
 
     const updatedExchange = Object.keys(newData)[0];
     const newPrice = newData[updatedExchange];
-    const oldPrice = row[updatedExchange]; // Capture old price
+    const oldPrice = row[updatedExchange]; // 이전 가격을 확인합니다.
 
     Object.assign(row, newData);
 
@@ -505,12 +505,14 @@
       const cell = $(`#cell-${exchange}-${symbol}`);
       if (!cell) return;
 
-      const priceChangeClass = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice)
-        ? (newPrice > oldPrice ? 'price-up' : 'price-down')
-        : '';
+      // 가격 변동이 있을 때만 'price-up' 또는 'price-down' 클래스를 적용합니다.
+      const priceChangeClass = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice) ?
+        (newPrice > oldPrice ? 'price-up' : 'price-down') :
+        '';
 
       let content;
       if (exchange === 'upbit' || exchange === 'bithumb') {
+        // 가격 숫자를 <span>으로 감싸고, 변동 클래스를 적용합니다.
         content = price != null ? `<span class="price-main ${priceChangeClass}">${formatNumber(price, 0)}</span>` : '-';
       } else {
         if (price == null) {
@@ -528,12 +530,13 @@
       }
       cell.innerHTML = content;
 
+      // priceChangeClass가 적용된 경우, 잠시 후 클래스를 제거하여 깜빡임 효과를 만듭니다.
       if (priceChangeClass) {
         const priceSpan = cell.querySelector('.price-main');
         if (priceSpan) {
-            setTimeout(() => {
-                priceSpan.classList.remove('price-up', 'price-down');
-            }, 700);
+          setTimeout(() => {
+            priceSpan.classList.remove('price-up', 'price-down');
+          }, 700);
         }
       }
     };
