@@ -319,20 +319,22 @@ module.exports = async (req, res) => {
 
         // 2. 모든 거래소 데이터를 병렬로 요청
         const results = await Promise.allSettled([
-            getExchangeRate(),
-            getUpbitTickers(upbitMarketBatch),
-            getBithumbTickers(),
-            Promise.resolve(null), // Binance Spot (Client)
-            Promise.resolve(null), // Bybit Spot (Client)
-            getOkxTickers(),
-            getBitgetTickers(),
-            getGateioTickers(),
-            getHyperliquidTickers(),
-            getOkxFuturesTickers(),
-            getBitgetFuturesTickers(),
-            getGateioFuturesTickers(),
-            getBinanceFundingRates(), // 펀딩비 추가
-            getOkxFundingRates()      // 펀딩비 추가
+            getExchangeRate(),              // 0
+            getUpbitTickers(upbitMarketBatch), // 1
+            getBithumbTickers(),            // 2
+            getBinanceTickers(),            // 3: 서버에서 직접 호출
+            getBybitTickers(),              // 4: 서버에서 직접 호출
+            getOkxTickers(),                // 5
+            getBitgetTickers(),             // 6
+            getGateioTickers(),             // 7
+            getHyperliquidTickers(),        // 8
+            getBinanceFuturesTickers(),     // 9: 서버에서 직접 호출
+            getBybitFuturesTickers(),       // 10: 서버에서 직접 호출
+            getOkxFuturesTickers(),         // 11
+            getBitgetFuturesTickers(),      // 12
+            getGateioFuturesTickers(),      // 13
+            getBinanceFundingRates(),       // 14
+            getOkxFundingRates()            // 15
         ]);
 
         const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
@@ -342,22 +344,22 @@ module.exports = async (req, res) => {
             rate: getValue(results[0], 1350),
             upbitTickers: getValue(results[1], []),
             bithumbMap: getValue(results[2], {}),
-            binanceMap: {},
-            bybitMap: {},
+            binanceMap: getValue(results[3], {}),
+            bybitMap: getValue(results[4], {}),
             okxMap: getValue(results[5], {}),
             bitgetMap: getValue(results[6], {}),
             gateMap: getValue(results[7], {}),
             hyperliquidMap: getValue(results[8], {}),
-            binanceFuturesMap: {},
-            bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[9], {}),
-            bitgetFuturesMap: getValue(results[10], {}),
-            gateioFuturesMap: getValue(results[11], {})
+            binanceFuturesMap: getValue(results[9], {}),
+            bybitFuturesMap: getValue(results[10], {}),
+            okxFuturesMap: getValue(results[11], {}),
+            bitgetFuturesMap: getValue(results[12], {}),
+            gateioFuturesMap: getValue(results[13], {})
         };
 
         // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[12], {});
-        const okxFunding = getValue(results[13], {});
+        const binanceFunding = getValue(results[14], {});
+        const okxFunding = getValue(results[15], {});
 
         for (const symbol in binanceFunding) {
             if (allData.binanceFuturesMap[symbol]) {

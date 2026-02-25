@@ -244,24 +244,6 @@
     }).catch(() => ({}));
   }
 
-  function getBinanceTickers() {
-    return fetchJson(BINANCE_TICKER_URL).then(list =>
-      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), change: parseFloat(t.priceChangePercent), volume: parseFloat(t.quoteVolume) };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
-  function getBybitTickers() {
-    return fetchJson(BYBIT_TICKER_URL).then(res =>
-      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
   function getOkxTickers() {
     return fetchJson(OKX_TICKER_URL).then(res =>
       (res.data || []).filter(t => t.instId.endsWith('-USDT')).reduce((acc, t) => {
@@ -317,24 +299,6 @@
   }
 
   // --- 선물 데이터 ---
-  function getBinanceFuturesTickers() {
-    return fetchJson(BINANCE_FUTURES_TICKER_URL).then(list =>
-      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice) };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
-  function getBybitFuturesTickers() {
-    return fetchJson(BYBIT_FUTURES_TICKER_URL).then(res =>
-      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
   function getOkxFuturesTickers() {
     return fetchJson(OKX_FUTURES_TICKER_URL).then(res =>
       (res.data || []).filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
@@ -1471,26 +1435,17 @@
     const tbody = $('#table-body');
     tbody.innerHTML = '<tr><td colspan="17" class="loading">서버에서 데이터를 가져오는 중...</td></tr>';
     try {
-      // 1. 서버 데이터 (Upbit, Bithumb, OKX 등)와 클라이언트 데이터 (Binance, Bybit) 병렬 요청
-      const [serverData, binanceMap, bybitMap, binanceFuturesMap, bybitFuturesMap] = await Promise.all([
-        fetch('/api/data').then(async res => {
-            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
-            return res.json();
-        }),
-        getBinanceTickers(),       // 내 컴퓨터에서 직접 요청
-        getBybitTickers(),         // 내 컴퓨터에서 직접 요청
-        getBinanceFuturesTickers(),// 내 컴퓨터에서 직접 요청
-        getBybitFuturesTickers()   // 내 컴퓨터에서 직접 요청
-      ]);
+      // 1. 서버에서 모든 거래소의 데이터 스냅샷을 한번에 가져옵니다.
+      // 이 방식은 클라이언트에서 CORS 오류를 발생시키지 않으며, 데이터 로딩을 안정화합니다.
+      const data = await fetch('/api/data').then(res => {
+        if (!res.ok) {
+          // 서버에서 5xx 에러가 나면 Vercel 로그를 확인해야 함
+          throw new Error(`서버에서 데이터를 가져오지 못했습니다 (HTTP ${res.status})`);
+        }
+        return res.json();
+      });
 
-      // 2. 데이터 병합
-      const data = serverData;
-      data.binanceMap = binanceMap;
-      data.bybitMap = bybitMap;
-      data.binanceFuturesMap = binanceFuturesMap;
-      data.bybitFuturesMap = bybitFuturesMap;
-
-      // 3. 스냅샷 데이터로 테이블 채우기
+      // 2. 스냅샷 데이터로 테이블 채우기
       krwPerUsd = data.rate;
       setMeta(data.rate, new Date().toLocaleTimeString('ko-KR'));
 
@@ -1535,7 +1490,7 @@
       allRows = matchedRows;
       applySortAndFilter(); // 전체 데이터로 다시 렌더링
 
-      // 3. 웹소켓 연결하여 실시간 업데이트 시작
+      // 3. 웹소켓을 연결하여 실시간 업데이트를 시작합니다.
       const upbitMarkets = allRows.map(r => `KRW-${r.name}`);
       connectWebsockets(upbitMarkets);
 
