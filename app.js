@@ -631,60 +631,71 @@
 
   function connectHyperliquidFuturesSocket(symbols) {
     const name = 'Hyperliquid';
-    if (sockets[name]) sockets[name].close();
+    // 이전 연결이 있다면, 재연결 로직이 중복 실행되지 않도록 onclose 핸들러를 제거하고 닫습니다.
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
 
-    let inactivityTimer = null;
-    let pingInterval = null; // 클라이언트에서 주기적으로 ping을 보낼 인터벌
-    const resetInactivityTimer = () => {
-        clearTimeout(inactivityTimer);
-        // 서버는 30초마다 ping을 보내므로, 40초 동안 아무 메시지가 없으면 연결이 끊긴 것으로 간주하고 재연결합니다.
-        inactivityTimer = setTimeout(() => {
-            console.warn('Hyperliquid connection timed out due to inactivity. Reconnecting...');
-            if (ws) ws.close(); // onclose 핸들러가 재연결을 트리거합니다.
-        }, 40000);
-    };
+    let ws;
+    let pingInterval = null;
+    let inactivityTimeout = null;
 
-    const ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
-    sockets[name] = ws;
+    const connect = () => {
+        ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
+        sockets[name] = ws;
 
-    ws.onopen = () => {
-        console.log(`${name} 웹소켓 연결 성공`);
-        ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
-        
-        // 클라이언트에서 20초마다 ping을 보내 연결을 유지합니다.
-        pingInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ method: 'ping', time: Date.now() }));
-            }
-        }, 20000); // 20초마다 ping 전송
-        resetInactivityTimer();
-    };
-    ws.onmessage = (e) => {
-        resetInactivityTimer(); // 메시지를 받을 때마다 타이머를 리셋합니다.
-        try {
+        const cleanup = () => {
+            clearInterval(pingInterval);
+            clearTimeout(inactivityTimeout);
+        };
+
+        const resetInactivityTimeout = () => {
+            clearTimeout(inactivityTimeout);
+            // 30초 동안 아무 메시지(데이터, pong 등)도 받지 못하면 연결이 끊긴 것으로 간주하고 재연결합니다.
+            inactivityTimeout = setTimeout(() => {
+                console.warn('Hyperliquid 연결이 응답하지 않아 강제로 재연결합니다.');
+                ws.close();
+            }, 30000);
+        };
+
+        ws.onopen = () => {
+            console.log(`${name} 웹소켓 연결 성공`);
+            ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+            // 공식 문서에 따라, 클라이언트는 15초마다 ping을 보내 연결을 유지해야 합니다.
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ method: 'ping' }));
+                }
+            }, 15000);
+            resetInactivityTimeout();
+        };
+
+        ws.onmessage = (e) => {
+            resetInactivityTimeout(); // 메시지를 수신했으므로 연결이 활성 상태입니다.
             const res = JSON.parse(e.data);
             if (res.channel === 'allMids' && res.data) {
                 const { coin, mid } = res.data;
                 updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
-            } else if (res.ping) { // 서버에서 보낸 ping 메시지에 응답
-                ws.send(JSON.stringify({ method: 'pong', time: res.ping }));
-            }
-            if (res.channel === 'ping') {
+            } else if (res.channel === 'ping') {
+                // 서버가 보낸 ping에 pong으로 응답합니다.
                 ws.send(JSON.stringify({ method: 'pong' }));
             }
-        } catch (error) {
-            console.error('Hyperliquid WS message processing error:', error);
-        }
+        };
+
+        ws.onclose = () => {
+            console.log(`${name} 웹소켓 연결이 끊겼습니다. 3초 후 재연결합니다.`);
+            cleanup();
+            setTimeout(connect, 3000);
+        };
+
+        ws.onerror = (error) => {
+            console.error(`Hyperliquid 웹소켓 오류:`, error);
+            ws.close(); // 오류 발생 시 onclose를 트리거하여 재연결 로직을 실행합니다.
+        };
     };
-    ws.onclose = () => {
-        clearInterval(pingInterval); // 연결이 닫히면 ping 인터벌을 정리합니다.
-        clearTimeout(inactivityTimer); // 연결이 닫히면 타이머를 정리합니다.
-        reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
-    };
-    ws.onerror = (error) => {
-        console.error(`Hyperliquid WS error:`, error);
-        ws.close(); // 에러 발생 시 연결을 닫아 onclose 핸들러가 재연결을 시도하도록 합니다.
-    };
+
+    connect(); // 재귀적으로 재연결되는 함수를 최초 실행합니다.
   }
 
   function updateRowData(symbol, newData) {
