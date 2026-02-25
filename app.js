@@ -661,7 +661,17 @@
 
         ws.onopen = () => {
             console.log(`${name} 웹소켓 연결 성공`);
-            ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+            
+            // [근본 해결] 'allMids' 대신 'trades' 채널을 구독하여 실제 거래 데이터를 실시간으로 수신합니다.
+            // OKX와 같이 1초에 여러 번 업데이트되는 효과를 제공합니다.
+            const tradeSubscriptions = symbols
+                .filter(s => s && s.length > 0)
+                .map(coin => ({
+                    method: 'subscribe',
+                    subscription: { type: 'trades', coin }
+                }));
+            tradeSubscriptions.forEach(sub => ws.send(JSON.stringify(sub)));
+
             // 공식 문서에 따라, 클라이언트는 15초마다 ping을 보내 연결을 유지해야 합니다.
             pingInterval = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
@@ -674,9 +684,11 @@
         ws.onmessage = (e) => {
             resetInactivityTimeout(); // 메시지를 수신했으므로 연결이 활성 상태입니다.
             const res = JSON.parse(e.data);
-            if (res.channel === 'allMids' && res.data) {
-                const { coin, mid } = res.data;
-                updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+            if (res.channel === 'trades' && res.data) {
+                // 'trades' 채널은 거래 데이터 배열을 보냅니다. 마지막 거래 가격으로 UI를 업데이트합니다.
+                res.data.forEach(trade => {
+                    updateRowData(trade.coin, { hyperliquid_perp: parseFloat(trade.price) });
+                });
             } else if (res.channel === 'ping') {
                 // 서버가 보낸 ping에 pong으로 응답합니다.
                 ws.send(JSON.stringify({ method: 'pong' }));
