@@ -244,24 +244,6 @@
     }).catch(() => ({}));
   }
 
-  function getBybitTickers() {
-    return fetchJson(BYBIT_TICKER_URL).then(res =>
-      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
-  function getBybitFuturesTickers() {
-    return fetchJson(BYBIT_FUTURES_TICKER_URL).then(res =>
-      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
   function getOkxTickers() {
     return fetchJson(OKX_TICKER_URL).then(res =>
       (res.data || []).filter(t => t.instId.endsWith('-USDT')).reduce((acc, t) => {
@@ -1455,20 +1437,12 @@
     const tbody = $('#table-body');
     tbody.innerHTML = '<tr><td colspan="17" class="loading">서버에서 데이터를 가져오는 중...</td></tr>';
     try {
-      // [수정] Bybit 데이터는 클라이언트에서 직접 가져와서 병합합니다. (서버 IP 차단 우회)
-      const [serverData, bybitMap, bybitFuturesMap] = await Promise.all([
-        fetch('/api/data').then(res => {
-          if (!res.ok) throw new Error(`서버 데이터 로딩 실패 (HTTP ${res.status})`);
-          return res.json();
-        }),
-        getBybitTickers(),
-        getBybitFuturesTickers()
-      ]);
-
-      // 데이터 병합
-      const data = serverData;
-      data.bybitMap = bybitMap;
-      data.bybitFuturesMap = bybitFuturesMap;
+      // 모든 거래소의 초기 데이터는 서버에서 안정적으로 한 번에 가져옵니다.
+      // 이 방식은 클라이언트(사용자 PC)의 네트워크나 설정에 영향을 받지 않아 더 안정적입니다.
+      const data = await fetch('/api/data').then(res => {
+        if (!res.ok) throw new Error(`서버 데이터 로딩 실패 (HTTP ${res.status})`);
+        return res.json();
+      });
 
       // 2. 스냅샷 데이터로 테이블 채우기
       krwPerUsd = data.rate;

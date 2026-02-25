@@ -305,13 +305,13 @@ module.exports = async (req, res) => {
             getUpbitTickers(upbitMarketBatch), // 1
             getBithumbTickers(),            // 2
             getBinanceTickers(),            // 3: 서버에서 직접 호출
-            Promise.resolve(null),          // 4: Bybit 현물 (클라이언트에서 처리)
+            getBybitTickers(),              // 4: 서버에서 직접 호출
             getOkxTickers(),                // 5
             getBitgetTickers(),             // 6
             getGateioTickers(),             // 7
             getHyperliquidTickers(),        // 8
             getBinanceFuturesTickers(),     // 9: 서버에서 직접 호출
-            Promise.resolve(null),          // 10: Bybit 선물 (클라이언트에서 처리)
+            getBybitFuturesTickers(),       // 10: 서버에서 직접 호출
             getOkxFuturesTickers(),         // 11
             getBitgetFuturesTickers(),      // 12
             getGateioFuturesTickers(),      // 13
