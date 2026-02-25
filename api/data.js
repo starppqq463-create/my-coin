@@ -17,8 +17,6 @@ const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.co
 const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
 const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
 const OKX_DOMAINS = ['www.okx.com', 'aws.okx.com'];
-const BITGET_DOMAINS = ['api.bitget.com']; // 일관성을 위해 배열로 관리
-const GATEIO_DOMAINS = ['api.gateio.ws', 'data.gate.io']; // 폴백 도메인 추가
 
 // 캐시 저장소 및 유효 시간
 const cache = { kimchi: null, funbi: null };
@@ -82,6 +80,24 @@ async function fetchJson(url, options = {}, retries = 1) {
             }
             await new Promise(res => setTimeout(res, 500)); // 재시도 전 0.5초 대기
         }
+    }
+}
+
+// [수정] IP 차단을 우회하기 위한 새로운 프록시 요청 함수
+async function fetchJsonViaProxy(url) {
+    // cors.bridged.cc는 GET 요청만 지원하는 것으로 보입니다.
+    const proxyUrl = `https://cors.bridged.cc/${url}`;
+    try {
+        const response = await axios({
+            method: 'GET',
+            url: `${proxyUrl}`, // 프록시 URL에 타임스탬프 추가는 불필요할 수 있음
+            headers: { 'User-Agent': 'Mozilla/5.0', 'x-request-url': url },
+            timeout: 8000
+        });
+        return response.data;
+    } catch (error) {
+        console.error(`[API-PROXY] Proxy fetch failed for ${url}: ${error.message}`);
+        return null;
     }
 }
 
@@ -176,17 +192,12 @@ async function getHyperliquidTickers() {
     return combined;
 }
 async function getGateioTickers() {
-    for (const domain of GATEIO_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/api/v4/spot/tickers`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
-                acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Gate.io spot domains failed.`);
-    return {};
+    const list = await fetchJson(GATEIO_TICKER_URL);
+    if (!list) return {};
+    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
+        return acc;
+    }, {});
 }
 async function getBinanceFuturesTickers() {
     for (const domain of BINANCE_FUTURES_DOMAINS) {
@@ -260,51 +271,36 @@ async function getOkxFundingRates() {
     return {};
 }
 async function getBitgetFuturesTickers() {
-    for (const domain of BITGET_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/api/v2/mix/market/tickers?productType=USDT-FUTURES`, {}, 0);
-        if (res && res.data) {
-            return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = {
-                    price: parseFloat(t.lastPr),
-                    funding: parseFloat(t.fundingRate),
-                    nextFundingTime: parseInt(t.nextFundingTime)
-                };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Bitget futures domains failed.`);
-    return {};
+    const res = await fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = {
+            price: parseFloat(t.lastPr),
+            funding: parseFloat(t.fundingRate),
+            nextFundingTime: parseInt(t.nextFundingTime)
+        };
+        return acc;
+    }, {});
 }
 async function getGateioFuturesTickers() {
-    for (const domain of GATEIO_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/api/v4/futures/usdt/tickers`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
-                acc[t.contract.replace('_USDT', '')] = {
-                    price: parseFloat(t.last),
-                    funding: parseFloat(t.funding_rate),
-                    nextFundingTime: parseInt(t.funding_next_apply) * 1000
-                };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Gate.io futures domains failed.`);
-    return {};
+    const list = await fetchJson('https://api.gateio.ws/api/v4/futures/usdt/tickers');
+    if (!list) return {};
+    return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
+        acc[t.contract.replace('_USDT', '')] = {
+            price: parseFloat(t.last),
+            funding: parseFloat(t.funding_rate),
+            nextFundingTime: parseInt(t.funding_next_apply) * 1000
+        };
+        return acc;
+    }, {});
 }
 async function getBitgetTickers() {
-    for (const domain of BITGET_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/api/v2/spot/market/tickers`, {}, 0);
-        if (res && res.data) {
-            return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Bitget spot domains failed.`);
-    return {};
+    const res = await fetchJson('https://api.bitget.com/api/v2/spot/market/tickers');
+    if (!res || !res.data) return {};
+    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
+        return acc;
+    }, {});
 }
 
 // 메인 핸들러
@@ -323,22 +319,20 @@ module.exports = async (req, res) => {
 
         // 2. 모든 거래소 데이터를 병렬로 요청
         const results = await Promise.allSettled([
-            getExchangeRate(),              // 0
-            getUpbitTickers(upbitMarketBatch), // 1
-            getBithumbTickers(),            // 2
-            getBinanceTickers(),            // 3: 서버에서 직접 호출
-            getBybitTickers(),              // 4: 서버에서 직접 호출
-            getOkxTickers(),                // 5
-            getBitgetTickers(),             // 6
-            getGateioTickers(),             // 7
-            getHyperliquidTickers(),        // 8
-            getBinanceFuturesTickers(),     // 9: 서버에서 직접 호출
-            getBybitFuturesTickers(),       // 10: 서버에서 직접 호출
-            getOkxFuturesTickers(),         // 11
-            getBitgetFuturesTickers(),      // 12
-            getGateioFuturesTickers(),      // 13
-            getBinanceFundingRates(),       // 14
-            getOkxFundingRates()            // 15
+            getExchangeRate(),
+            getUpbitTickers(upbitMarketBatch),
+            getBithumbTickers(),
+            Promise.resolve(null), // Binance Spot (Client)
+            Promise.resolve(null), // Bybit Spot (Client)
+            getOkxTickers(),
+            getBitgetTickers(),
+            getGateioTickers(),
+            getHyperliquidTickers(),
+            getOkxFuturesTickers(),
+            getBitgetFuturesTickers(),
+            getGateioFuturesTickers(),
+            getBinanceFundingRates(), // 펀딩비 추가
+            getOkxFundingRates()      // 펀딩비 추가
         ]);
 
         const getValue = (result, defaultValue) => (result.status === 'fulfilled' && result.value !== null) ? result.value : defaultValue;
@@ -348,22 +342,22 @@ module.exports = async (req, res) => {
             rate: getValue(results[0], 1350),
             upbitTickers: getValue(results[1], []),
             bithumbMap: getValue(results[2], {}),
-            binanceMap: getValue(results[3], {}),
-            bybitMap: getValue(results[4], {}),
+            binanceMap: {},
+            bybitMap: {},
             okxMap: getValue(results[5], {}),
             bitgetMap: getValue(results[6], {}),
             gateMap: getValue(results[7], {}),
             hyperliquidMap: getValue(results[8], {}),
-            binanceFuturesMap: getValue(results[9], {}),
-            bybitFuturesMap: getValue(results[10], {}),
-            okxFuturesMap: getValue(results[11], {}),
-            bitgetFuturesMap: getValue(results[12], {}),
-            gateioFuturesMap: getValue(results[13], {})
+            binanceFuturesMap: {},
+            bybitFuturesMap: {},
+            okxFuturesMap: getValue(results[9], {}),
+            bitgetFuturesMap: getValue(results[10], {}),
+            gateioFuturesMap: getValue(results[11], {})
         };
 
         // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[14], {});
-        const okxFunding = getValue(results[15], {});
+        const binanceFunding = getValue(results[12], {});
+        const okxFunding = getValue(results[13], {});
 
         for (const symbol in binanceFunding) {
             if (allData.binanceFuturesMap[symbol]) {
