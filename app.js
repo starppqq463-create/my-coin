@@ -634,6 +634,7 @@
     if (sockets[name]) sockets[name].close();
 
     let inactivityTimer = null;
+    let pingInterval = null; // 클라이언트에서 주기적으로 ping을 보낼 인터벌
     const resetInactivityTimer = () => {
         clearTimeout(inactivityTimer);
         // 서버는 30초마다 ping을 보내므로, 40초 동안 아무 메시지가 없으면 연결이 끊긴 것으로 간주하고 재연결합니다.
@@ -649,6 +650,13 @@
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+        
+        // 클라이언트에서 20초마다 ping을 보내 연결을 유지합니다.
+        pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ method: 'ping', time: Date.now() }));
+            }
+        }, 20000); // 20초마다 ping 전송
         resetInactivityTimer();
     };
     ws.onmessage = (e) => {
@@ -658,6 +666,8 @@
             if (res.channel === 'allMids' && res.data) {
                 const { coin, mid } = res.data;
                 updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+            } else if (res.ping) { // 서버에서 보낸 ping 메시지에 응답
+                ws.send(JSON.stringify({ method: 'pong', time: res.ping }));
             }
             if (res.channel === 'ping') {
                 ws.send(JSON.stringify({ method: 'pong' }));
@@ -667,8 +677,13 @@
         }
     };
     ws.onclose = () => {
+        clearInterval(pingInterval); // 연결이 닫히면 ping 인터벌을 정리합니다.
         clearTimeout(inactivityTimer); // 연결이 닫히면 타이머를 정리합니다.
         reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
+    };
+    ws.onerror = (error) => {
+        console.error(`Hyperliquid WS error:`, error);
+        ws.close(); // 에러 발생 시 연결을 닫아 onclose 핸들러가 재연결을 시도하도록 합니다.
     };
   }
 
