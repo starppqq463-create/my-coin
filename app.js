@@ -464,13 +464,20 @@
 
   function connectBybitSocket(symbols) {
     const name = 'Bybit';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
     const ws = new WebSocket('wss://stream.bybit.com/v5/public/spot');
     sockets[name] = ws;
+    let pingInterval = null;
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
       console.log(`${name} 웹소켓 연결 성공`);
       const args = symbols.map(s => `tickers.${s}USDT`);
       ws.send(JSON.stringify({ op: 'subscribe', args }));
+      pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
     };
     ws.onmessage = (e) => {
       const t = JSON.parse(e.data);
@@ -478,8 +485,15 @@
         updateRowData(t.data.symbol.replace('USDT', ''), { bybit: parseFloat(t.data.lastPrice) });
       }
     };
-    ws.onclose = () => reconnect(name, () => connectBybitSocket(symbols));
-    setInterval(() => { if (ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        cleanup();
+        setTimeout(() => connectBybitSocket(symbols), 500);
+    };
+    ws.onerror = (err) => {
+        console.error(`${name} 웹소켓 오류 발생:`, err);
+        ws.close();
+    };
   }
 
   function connectBinanceFuturesSocket(symbols) {
@@ -501,13 +515,20 @@
 
   function connectBybitFuturesSocket(symbols) {
     const name = 'BybitFutures';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
     const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
     sockets[name] = ws;
+    let pingInterval = null;
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
       console.log(`${name} 웹소켓 연결 성공`);
       const args = symbols.map(s => `tickers.${s}USDT`);
       ws.send(JSON.stringify({ op: 'subscribe', args }));
+      pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
     };
     ws.onmessage = (e) => {
       const t = JSON.parse(e.data);
@@ -515,8 +536,15 @@
         updateRowData(t.data.symbol.replace('USDT', ''), { bybit_perp: parseFloat(t.data.lastPrice) });
       }
     };
-    ws.onclose = () => reconnect(name, () => connectBybitFuturesSocket(symbols));
-    setInterval(() => { if (ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        cleanup();
+        setTimeout(() => connectBybitFuturesSocket(symbols), 500);
+    };
+    ws.onerror = (err) => {
+        console.error(`${name} 웹소켓 오류 발생:`, err);
+        ws.close();
+    };
   }
 
   function connectOkxSocket(symbols) {
