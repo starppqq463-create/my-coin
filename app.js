@@ -602,12 +602,12 @@
             const t = res.result;
             updateRowData(t.currency_pair.replace('_USDT', ''), { gate: parseFloat(t.last) });
         }
-        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
-        if (res.channel === 'spot.ping') {
-            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.pong' }));
-        }
     };
-    ws.onclose = () => reconnect(name, () => connectGateioSocket(symbols));
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        if (sockets[name]) sockets[name].close();
+        setTimeout(() => connectGateioSocket(symbols), 500);
+    };
     setInterval(() => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
     }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
@@ -630,12 +630,12 @@
                 updateRowData(t.contract.replace('_USDT', ''), { gate_perp: parseFloat(t.last) });
             });
         }
-        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
-        if (res.channel === 'futures.ping') {
-            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.pong' }));
-        }
     };
-    ws.onclose = () => reconnect(name, () => connectGateioFuturesSocket(symbols));
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        if (sockets[name]) sockets[name].close();
+        setTimeout(() => connectGateioFuturesSocket(symbols), 500);
+    };
     setInterval(() => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
     }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
