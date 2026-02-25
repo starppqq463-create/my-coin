@@ -495,7 +495,7 @@
 
     const updatedExchange = Object.keys(newData)[0];
     const newPrice = newData[updatedExchange];
-    const oldPrice = row[updatedExchange]; // 이전 가격을 확인합니다.
+    const oldPrice = row[updatedExchange];
 
     Object.assign(row, newData);
 
@@ -524,7 +524,6 @@
       }
       cell.innerHTML = content;
 
-      // 가격 변동이 있을 때 애니메이션 클래스를 적용하여 깜빡임 효과를 줍니다.
       const isPriceChanged = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice);
       if (isPriceChanged) {
         const priceSpan = cell.querySelector('.price-main');

@@ -17,8 +17,8 @@
       --text-primary: #eaecef;
       --text-secondary: #848e9c;
       --border-color: #2b3139;
-      --up-color: #c84a31; /* 업비트 상승색 */
-      --down-color: #1261c4; /* 업비트 하락색 */
+      --up-color: #14f195; /* 밝은 녹색 */
+      --down-color: #f6465d; /* 밝은 빨간색 */
       --premium-high-bg: transparent;
     }
 
@@ -30,8 +30,8 @@
       --text-primary: #0f172a;
       --text-secondary: #6b7280;
       --border-color: #e5e7eb;
-      --up-color: #16a34a; /* Green for up */
-      --down-color: #dc2626; /* Red for down */
+      --up-color: #14f195; /* 밝은 녹색 */
+      --down-color: #f6465d; /* 밝은 빨간색 */
     }
     .light-theme .logo { color: #0f172a; }
     .light-theme .search-input { background: #f9fafb; color: #0f172a; border-color: #d1d5db; }
@@ -188,9 +188,27 @@
       to { background-color: transparent; }
     }
     .price-flash {
-      animation: price-flash 0.7s ease-out;
+      /* 이 클래스는 더 이상 가격 깜빡임에 사용되지 않습니다. */
+      animation: none !important;
     }
 
+    /* 가격 숫자 깜빡임 효과 (애니메이션) */
+    @keyframes price-flash-up {
+      50% { color: var(--up-color); }
+    }
+
+    @keyframes price-flash-down {
+      50% { color: var(--down-color); }
+    }
+
+    .price-up-animation {
+      animation: price-flash-up 0.7s ease-out;
+    }
+
+    .price-down-animation {
+      animation: price-flash-down 0.7s ease-out;
+    }
+    
     /* 페이지네이션 */
     .pagination {
       display: flex;
