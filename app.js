@@ -700,7 +700,7 @@
                 } else {
                     clearInterval(subscribeInterval);
                 }
-            }, 20); // 20ms 간격으로 구독
+            }, 10); // 10ms 간격으로 구독하여 더 빠르게 구독 시작
 
             // 공식 문서에 따라, 클라이언트는 15초마다 ping을 보내 연결을 유지해야 합니다.
             pingInterval = setInterval(() => {
@@ -1607,8 +1607,8 @@
       const upbitMarkets = allRows.map(r => `KRW-${r.name}`);
       connectWebsockets(upbitMarkets);
 
-      // 5초마다 Hyperliquid 현물 가격을 폴링하여 업데이트합니다.
-      setInterval(pollHyperliquidSpot, 5000);
+      // 2초마다 Hyperliquid 현물 가격을 폴링하여 업데이트합니다.
+      setInterval(pollHyperliquidSpot, 1000);
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
