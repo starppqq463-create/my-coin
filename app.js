@@ -493,6 +493,10 @@
     const row = allRows.find(r => r.name === symbol);
     if (!row) return;
 
+    const updatedExchange = Object.keys(newData)[0];
+    const newPrice = newData[updatedExchange];
+    const oldPrice = row[updatedExchange]; // Capture old price
+
     Object.assign(row, newData);
 
     const premiumBasePrice = premiumBase === 'bithumb' ? row.bithumb : row.upbit;
@@ -501,9 +505,13 @@
       const cell = $(`#cell-${exchange}-${symbol}`);
       if (!cell) return;
 
+      const priceChangeClass = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice)
+        ? (newPrice > oldPrice ? 'price-up' : 'price-down')
+        : '';
+
       let content;
       if (exchange === 'upbit' || exchange === 'bithumb') {
-        content = price != null ? formatNumber(price, 0) : '-';
+        content = price != null ? `<span class="price-main ${priceChangeClass}">${formatNumber(price, 0)}</span>` : '-';
       } else {
         if (price == null) {
           content = '-';
@@ -515,16 +523,22 @@
             const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
             premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
           }
-          content = `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+          content = `<span class="price-main ${priceChangeClass}">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
         }
       }
       cell.innerHTML = content;
-      cell.classList.add('price-flash');
-      setTimeout(() => cell.classList.remove('price-flash'), 700);
+
+      if (priceChangeClass) {
+        const priceSpan = cell.querySelector('.price-main');
+        if (priceSpan) {
+            setTimeout(() => {
+                priceSpan.classList.remove('price-up', 'price-down');
+            }, 700);
+        }
+      }
     };
 
     // 방금 업데이트된 가격 셀 업데이트
-    const updatedExchange = Object.keys(newData)[0];
     updateCell(updatedExchange, row[updatedExchange]);
 
     // 김프 기준가가 변경되었을 수 있으므로, 해당 코인의 모든 해외거래소 셀을 다시 계산하여 업데이트
@@ -548,7 +562,7 @@
     tbody.innerHTML = rows.map(r => {      
       const basePrice = r[premiumBase];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
-      const fmtKrw = v => v != null ? formatNumber(v, 0) : '-';
+      const fmtKrw = v => v != null ? `<span class="price-main">${formatNumber(v, 0)}</span>` : '-';
       
       const fmtOverseas = (price) => {
         if (price == null) return '-';
@@ -559,7 +573,7 @@
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
           premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
         }
-        return `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
