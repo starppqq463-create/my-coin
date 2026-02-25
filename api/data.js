@@ -138,7 +138,8 @@ async function getBinanceTickers() {
 }
 async function getBybitTickers() {
     for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
+        // 서버 IP 차단을 우회하기 위해 프록시를 통해 요청합니다.
+        const res = await fetchJsonViaProxy(`https://${domain}/v5/market/tickers?category=spot`);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
                 acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
@@ -230,7 +231,8 @@ async function getBinanceFundingRates() {
 }
 async function getBybitFuturesTickers() {
     for (const domain of BYBIT_DOMAINS) {
-        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
+        // 서버 IP 차단을 우회하기 위해 프록시를 통해 요청합니다.
+        const res = await fetchJsonViaProxy(`https://${domain}/v5/market/tickers?category=linear`);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
                 acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
