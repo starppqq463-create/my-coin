@@ -379,7 +379,8 @@
     connectBithumbSocket(symbols);
     connectBinanceSocket(symbols);
     connectBybitSocket(symbols);
-    // OKX, Bitget 등 다른 거래소도 유사하게 추가 가능
+    connectBinanceFuturesSocket(symbols); // 바이낸스 선물 웹소켓 연결 추가
+    // OKX, Bybit 선물 등 다른 거래소도 유사하게 추가 가능
   }
 
   function reconnect(name, connectFn) {
@@ -463,6 +464,23 @@
     };
     ws.onclose = () => reconnect(name, () => connectBybitSocket(symbols));
     setInterval(() => { if (ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+  }
+
+  function connectBinanceFuturesSocket(symbols) {
+    const name = 'BinanceFutures';
+    if (sockets[name]) sockets[name].close();
+    const streams = symbols.map(s => `${s.toLowerCase()}usdt@ticker`).join('/');
+    const ws = new WebSocket(`wss://fstream.binance.com/stream?streams=${streams}`);
+    sockets[name] = ws;
+    ws.onopen = () => console.log(`${name} 웹소켓 연결 성공`);
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data).data;
+      if (t.e === '24hrTicker') {
+        // 선물 가격이므로 'binance_perp' 키로 업데이트합니다.
+        updateRowData(t.s.replace('USDT', ''), { binance_perp: parseFloat(t.c) });
+      }
+    };
+    ws.onclose = () => reconnect(name, () => connectBinanceFuturesSocket(symbols));
   }
 
   function updateRowData(symbol, newData) {
