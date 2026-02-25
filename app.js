@@ -632,24 +632,44 @@
   function connectHyperliquidFuturesSocket(symbols) {
     const name = 'Hyperliquid';
     if (sockets[name]) sockets[name].close();
+
+    let inactivityTimer = null;
+    const resetInactivityTimer = () => {
+        clearTimeout(inactivityTimer);
+        // 서버는 30초마다 ping을 보내므로, 40초 동안 아무 메시지가 없으면 연결이 끊긴 것으로 간주하고 재연결합니다.
+        inactivityTimer = setTimeout(() => {
+            console.warn('Hyperliquid connection timed out due to inactivity. Reconnecting...');
+            if (ws) ws.close(); // onclose 핸들러가 재연결을 트리거합니다.
+        }, 40000);
+    };
+
     const ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
     sockets[name] = ws;
+
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+        resetInactivityTimer();
     };
     ws.onmessage = (e) => {
-        const res = JSON.parse(e.data);
-        if (res.channel === 'allMids' && res.data) {
-            const { coin, mid } = res.data;
-            updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
-        }
-        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
-        if (res.channel === 'ping') {
-            ws.send(JSON.stringify({ method: 'pong' }));
+        resetInactivityTimer(); // 메시지를 받을 때마다 타이머를 리셋합니다.
+        try {
+            const res = JSON.parse(e.data);
+            if (res.channel === 'allMids' && res.data) {
+                const { coin, mid } = res.data;
+                updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+            }
+            if (res.channel === 'ping') {
+                ws.send(JSON.stringify({ method: 'pong' }));
+            }
+        } catch (error) {
+            console.error('Hyperliquid WS message processing error:', error);
         }
     };
-    ws.onclose = () => reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
+    ws.onclose = () => {
+        clearTimeout(inactivityTimer); // 연결이 닫히면 타이머를 정리합니다.
+        reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
+    };
   }
 
   function updateRowData(symbol, newData) {
