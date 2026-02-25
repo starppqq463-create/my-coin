@@ -336,6 +336,28 @@
     return order.slice(0, MAX_MARKETS_PER_REQUEST);
   }
 
+  // [추가] Hyperliquid 현물 가격 주기적 폴링 함수
+  async function pollHyperliquidSpot() {
+    try {
+      const data = await fetchJson(HYPERLIQUID_TICKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'metaAndAssetCtxs' })
+      });
+      if (Array.isArray(data) && data.length >= 2 && data[0] && Array.isArray(data[0].universe)) {
+        const universe = data[0].universe;
+        const ctxs = data[1];
+        universe.forEach((u, i) => {
+          const ctx = ctxs[i];
+          // 해당 코인이 테이블에 존재하고, 유효한 오라클 가격이 있을 때만 업데이트
+          if (u.name && ctx && ctx.oraclePx && allRows.some(row => row.name === u.name)) {
+            updateRowData(u.name, { hyperliquid_spot: parseFloat(ctx.oraclePx) });
+          }
+        });
+      }
+    } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
+  }
+
   // --- 실시간 데이터 처리 (웹소켓) ---
   function connectWebsockets(markets) {
     const symbols = markets.map(m => m.replace('KRW-', ''));
@@ -1584,6 +1606,9 @@
       // 3. 웹소켓을 연결하여 실시간 업데이트를 시작합니다.
       const upbitMarkets = allRows.map(r => `KRW-${r.name}`);
       connectWebsockets(upbitMarkets);
+
+      // 5초마다 Hyperliquid 현물 가격을 폴링하여 업데이트합니다.
+      setInterval(pollHyperliquidSpot, 5000);
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
