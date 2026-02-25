@@ -1633,8 +1633,8 @@
       // 2초마다 Hyperliquid 현물 가격을 폴링하여 업데이트합니다.
       setInterval(pollHyperliquidSpot, 1000);
 
-      // 2초마다 Bitget 현물/선물 가격을 폴링하여 업데이트합니다.
-      setInterval(pollBitgetPrices, 2000);
+      // 0.5초마다 Bitget 현물/선물 가격을 폴링하여 업데이트합니다.
+      setInterval(pollBitgetPrices, 500);
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
