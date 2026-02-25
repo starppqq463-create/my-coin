@@ -379,8 +379,15 @@
     connectBithumbSocket(symbols);
     connectBinanceSocket(symbols);
     connectBybitSocket(symbols);
-    connectBinanceFuturesSocket(symbols); // 바이낸스 선물 웹소켓 연결 추가
-    // OKX, Bybit 선물 등 다른 거래소도 유사하게 추가 가능
+    connectBinanceFuturesSocket(symbols);
+    connectBybitFuturesSocket(symbols);
+    connectOkxSocket(symbols);
+    connectOkxFuturesSocket(symbols);
+    connectBitgetSocket(symbols);
+    connectBitgetFuturesSocket(symbols);
+    connectGateioSocket(symbols);
+    connectGateioFuturesSocket(symbols);
+    connectHyperliquidFuturesSocket(symbols); // Hyperliquid 현물은 실시간 스트림을 지원하지 않아 새로고침 시에만 업데이트됩니다.
   }
 
   function reconnect(name, connectFn) {
@@ -483,9 +490,187 @@
     ws.onclose = () => reconnect(name, () => connectBinanceFuturesSocket(symbols));
   }
 
+  function connectBybitFuturesSocket(symbols) {
+    const name = 'BybitFutures';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
+    sockets[name] = ws;
+    ws.onopen = () => {
+      console.log(`${name} 웹소켓 연결 성공`);
+      const args = symbols.map(s => `tickers.${s}USDT`);
+      ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data);
+      if (t.topic && t.topic.startsWith('tickers') && t.data) {
+        updateRowData(t.data.symbol.replace('USDT', ''), { bybit_perp: parseFloat(t.data.lastPrice) });
+      }
+    };
+    ws.onclose = () => reconnect(name, () => connectBybitFuturesSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+  }
+
+  function connectOkxSocket(symbols) {
+    const name = 'OKX';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => ({ channel: 'tickers', instId: `${s}-USDT` }));
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.data) {
+            res.data.forEach(t => {
+                updateRowData(t.instId.replace('-USDT', ''), { okx: parseFloat(t.last) });
+            });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectOkxSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+  }
+
+  function connectOkxFuturesSocket(symbols) {
+    const name = 'OKXFutures';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => ({ channel: 'tickers', instId: `${s}-USDT-SWAP` }));
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.data) {
+            res.data.forEach(t => {
+                updateRowData(t.instId.replace('-USDT-SWAP', ''), { okx_perp: parseFloat(t.last) });
+            });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectOkxFuturesSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+  }
+
+  function connectBitgetSocket(symbols) {
+    const name = 'Bitget';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://ws.bitget.com/v2/spot/public/tickers');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => ({ instType: 'SPOT', channel: 'ticker', instId: `${s}USDT` }));
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.action === 'snapshot' && res.data) {
+            res.data.forEach(t => {
+                updateRowData(t.instId.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
+            });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectBitgetSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+  }
+
+  function connectBitgetFuturesSocket(symbols) {
+    const name = 'BitgetFutures';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://ws.bitget.com/v2/mix/public/tickers');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => ({ instType: 'USDT-FUTURES', channel: 'ticker', instId: `${s}USDT` }));
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.action === 'snapshot' && res.data) {
+            res.data.forEach(t => {
+                updateRowData(t.instId.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
+            });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectBitgetFuturesSocket(symbols));
+    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+  }
+
+  function connectGateioSocket(symbols) {
+    const name = 'Gateio';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://api.gateio.ws/ws/v4/');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const payload = symbols.map(s => `${s}_USDT`);
+        ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.tickers', event: 'subscribe', payload }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.channel === 'spot.tickers' && res.event === 'update' && res.result) {
+            const t = res.result;
+            updateRowData(t.currency_pair.replace('_USDT', ''), { gate: parseFloat(t.last) });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectGateioSocket(symbols));
+    setInterval(() => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
+    }, 20000);
+  }
+
+  function connectGateioFuturesSocket(symbols) {
+    const name = 'GateioFutures';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://fx-ws.gateio.ws/v4/ws/usdt');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const payload = symbols.map(s => `${s}_USDT`);
+        ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.tickers', event: 'subscribe', payload }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.channel === 'futures.tickers' && res.event === 'update' && Array.isArray(res.result)) {
+            res.result.forEach(t => {
+                updateRowData(t.contract.replace('_USDT', ''), { gate_perp: parseFloat(t.last) });
+            });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectGateioFuturesSocket(symbols));
+    setInterval(() => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
+    }, 20000);
+  }
+
+  function connectHyperliquidFuturesSocket(symbols) {
+    const name = 'Hyperliquid';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
+    sockets[name] = ws;
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+    };
+    ws.onmessage = (e) => {
+        const res = JSON.parse(e.data);
+        if (res.channel === 'allMids' && res.data) {
+            const { coin, mid } = res.data;
+            updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
+  }
+
   function updateRowData(symbol, newData) {
     const row = allRows.find(r => r.name === symbol);
     if (!row) return;
+
+    const updatedExchange = Object.keys(newData)[0];
+    const newPrice = newData[updatedExchange];
+    const oldPrice = row[updatedExchange];
 
     Object.assign(row, newData);
 
@@ -497,7 +682,7 @@
 
       let content;
       if (exchange === 'upbit' || exchange === 'bithumb') {
-        content = price != null ? formatNumber(price, 0) : '-';
+        content = price != null ? `<span class="price-main">${formatNumber(price, 0)}</span>` : '-';
       } else {
         if (price == null) {
           content = '-';
@@ -509,16 +694,25 @@
             const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
             premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
           }
-          content = `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+          content = `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
         }
       }
       cell.innerHTML = content;
-      cell.classList.add('price-flash');
-      setTimeout(() => cell.classList.remove('price-flash'), 700);
+
+      const isPriceChanged = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice);
+      if (isPriceChanged) {
+        const priceSpan = cell.querySelector('.price-main');
+        if (priceSpan) {
+          const animationClass = newPrice > oldPrice ? 'price-up-animation' : 'price-down-animation';
+          priceSpan.classList.add(animationClass);
+          setTimeout(() => {
+            priceSpan.classList.remove(animationClass);
+          }, 700);
+        }
+      }
     };
 
     // 방금 업데이트된 가격 셀 업데이트
-    const updatedExchange = Object.keys(newData)[0];
     updateCell(updatedExchange, row[updatedExchange]);
 
     // 김프 기준가가 변경되었을 수 있으므로, 해당 코인의 모든 해외거래소 셀을 다시 계산하여 업데이트
@@ -542,7 +736,7 @@
     tbody.innerHTML = rows.map(r => {      
       const basePrice = r[premiumBase];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
-      const fmtKrw = v => v != null ? formatNumber(v, 0) : '-';
+      const fmtKrw = v => v != null ? `<span class="price-main">${formatNumber(v, 0)}</span>` : '-';
       
       const fmtOverseas = (price) => {
         if (price == null) return '-';
@@ -553,7 +747,7 @@
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
           premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
         }
-        return `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
