@@ -661,9 +661,13 @@
 
         ws.onopen = () => {
             console.log(`${name} 웹소켓 연결 성공`);
-            
-            // [근본 해결] 'allMids' 대신 'trades' 채널을 구독하여 실제 거래 데이터를 실시간으로 수신합니다.
-            // OKX와 같이 1초에 여러 번 업데이트되는 효과를 제공합니다.
+
+            // [수정] 1. 'allMids'를 먼저 구독하여 모든 코인의 초기 가격을 빠르게 가져옵니다.
+            // 이 데이터는 거래가 없을 때도 가격을 표시해주는 역할을 합니다.
+            ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allMids' } }));
+
+            // [수정] 2. 'trades' 채널을 추가로 구독하여 실제 거래 데이터를 실시간으로 수신합니다.
+            // 이를 통해 OKX와 같이 1초에 여러 번 업데이트되는 빠른 실시간 효과를 제공합니다.
             const tradeSubscriptions = symbols
                 .filter(s => s && s.length > 0)
                 .map(coin => ({
@@ -684,8 +688,12 @@
         ws.onmessage = (e) => {
             resetInactivityTimeout(); // 메시지를 수신했으므로 연결이 활성 상태입니다.
             const res = JSON.parse(e.data);
-            if (res.channel === 'trades' && res.data) {
-                // 'trades' 채널은 거래 데이터 배열을 보냅니다. 마지막 거래 가격으로 UI를 업데이트합니다.
+            if (res.channel === 'allMids' && res.data) {
+                // 'allMids'는 초기 가격 및 호가 중간가 스냅샷을 제공합니다.
+                const { coin, mid } = res.data;
+                updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+            } else if (res.channel === 'trades' && res.data) {
+                // 'trades' 채널은 실제 체결 데이터를 제공하여 더 빠른 업데이트를 보장합니다.
                 res.data.forEach(trade => {
                     updateRowData(trade.coin, { hyperliquid_perp: parseFloat(trade.price) });
                 });
