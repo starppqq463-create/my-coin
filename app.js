@@ -530,6 +530,11 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
+        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
+        if (res.ping) {
+            ws.send('pong');
+            return;
+        }
         // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
@@ -553,6 +558,11 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
+        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
+        if (res.ping) {
+            ws.send('pong');
+            return;
+        }
         // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
@@ -580,6 +590,10 @@
             const t = res.result;
             updateRowData(t.currency_pair.replace('_USDT', ''), { gate: parseFloat(t.last) });
         }
+        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
+        if (res.channel === 'spot.ping') {
+            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.pong' }));
+        }
     };
     ws.onclose = () => reconnect(name, () => connectGateioSocket(symbols));
     setInterval(() => {
@@ -604,6 +618,10 @@
                 updateRowData(t.contract.replace('_USDT', ''), { gate_perp: parseFloat(t.last) });
             });
         }
+        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
+        if (res.channel === 'futures.ping') {
+            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.pong' }));
+        }
     };
     ws.onclose = () => reconnect(name, () => connectGateioFuturesSocket(symbols));
     setInterval(() => {
@@ -625,6 +643,10 @@
         if (res.channel === 'allMids' && res.data) {
             const { coin, mid } = res.data;
             updateRowData(coin, { hyperliquid_perp: parseFloat(mid) });
+        }
+        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
+        if (res.channel === 'ping') {
+            ws.send(JSON.stringify({ method: 'pong' }));
         }
     };
     ws.onclose = () => reconnect(name, () => connectHyperliquidFuturesSocket(symbols));
