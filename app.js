@@ -542,48 +542,85 @@
 
   function connectBitgetSocket(symbols) {
     const name = 'Bitget';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
     const ws = new WebSocket('wss://ws.bitget.com/v2/spot/public/tickers');
     sockets[name] = ws;
+    let pingInterval = null;
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const args = symbols.map(s => ({ instType: 'SPOT', channel: 'ticker', instId: `${s}USDT` }));
-        ws.send(JSON.stringify({ op: 'subscribe', args }));
+        // [수정] 한 번에 너무 많은 심볼을 구독하면 연결이 끊길 수 있으므로, 청크로 나누어 순차적으로 보냅니다.
+        const chunkSize = 20;
+        for (let i = 0; i < args.length; i += chunkSize) {
+            const chunk = args.slice(i, i + chunkSize);
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+                }
+            }, i * 25);
+        }
+        pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. (클라이언트가 30초마다 ping을 보냅니다)
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
             });
         }
     };
-    ws.onclose = () => reconnect(name, () => connectBitgetSocket(symbols));
-    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        cleanup();
+        setTimeout(() => connectBitgetSocket(symbols), 500);
+    };
+    ws.onerror = () => ws.close();
   }
 
   function connectBitgetFuturesSocket(symbols) {
     const name = 'BitgetFutures';
-    if (sockets[name]) sockets[name].close();
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
     const ws = new WebSocket('wss://ws.bitget.com/v2/mix/public/tickers');
     sockets[name] = ws;
+    let pingInterval = null;
+    const cleanup = () => clearInterval(pingInterval);
+
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const args = symbols.map(s => ({ instType: 'USDT-FUTURES', channel: 'ticker', instId: `${s}USDT` }));
-        ws.send(JSON.stringify({ op: 'subscribe', args }));
+        const chunkSize = 20;
+        for (let i = 0; i < args.length; i += chunkSize) {
+            const chunk = args.slice(i, i + chunkSize);
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+                }
+            }, i * 25);
+        }
+        pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. (클라이언트가 30초마다 ping을 보냅니다)
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
             });
         }
     };
-    ws.onclose = () => reconnect(name, () => connectBitgetFuturesSocket(symbols));
-    setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        cleanup();
+        setTimeout(() => connectBitgetFuturesSocket(symbols), 500);
+    };
+    ws.onerror = () => ws.close();
   }
 
   function connectGateioSocket(symbols) {
