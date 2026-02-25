@@ -603,16 +603,17 @@
         console.log(`${name} 웹소켓 연결 성공`);
         const payload = symbols.map(s => `${s}_USDT`);
 
-        // [수정] 한 번에 너무 많은 심볼을 구독하면 연결이 끊길 수 있으므로, 청크로 나누어 순차적으로 보냅니다.
+        // [수정] 한 번에 모든 구독을 요청하면 서버가 연결을 끊으므로, 20개씩 순차적으로 요청합니다.
         const chunkSize = 20;
-        for (let i = 0; i < payload.length; i += chunkSize) {
+        let i = 0;
+        function subscribeSequentially() {
+            if (i >= payload.length || ws.readyState !== WebSocket.OPEN) return;
             const chunk = payload.slice(i, i + chunkSize);
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.tickers', event: 'subscribe', payload: chunk }));
-                }
-            }, i * 25); // 25ms 간격으로 전송
+            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.tickers', event: 'subscribe', payload: chunk }));
+            i += chunkSize;
+            setTimeout(subscribeSequentially, 100); // 100ms 간격으로 다음 청크 전송
         }
+        subscribeSequentially();
 
         pingInterval = setInterval(() => {
             if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
@@ -652,15 +653,17 @@
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const payload = symbols.map(s => `${s}_USDT`);
+        // [수정] 현물과 동일하게, 선물도 안정성을 위해 순차적으로 구독 요청합니다.
         const chunkSize = 20;
-        for (let i = 0; i < payload.length; i += chunkSize) {
+        let i = 0;
+        function subscribeSequentially() {
+            if (i >= payload.length || ws.readyState !== WebSocket.OPEN) return;
             const chunk = payload.slice(i, i + chunkSize);
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.tickers', event: 'subscribe', payload: chunk }));
-                }
-            }, i * 25);
+            ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.tickers', event: 'subscribe', payload: chunk }));
+            i += chunkSize;
+            setTimeout(subscribeSequentially, 100); // 100ms 간격으로 다음 청크 전송
         }
+        subscribeSequentially();
 
         pingInterval = setInterval(() => {
             if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
