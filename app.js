@@ -505,15 +505,9 @@
       const cell = $(`#cell-${exchange}-${symbol}`);
       if (!cell) return;
 
-      // 가격 변동이 있을 때만 'price-up' 또는 'price-down' 클래스를 적용합니다.
-      const priceChangeClass = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice) ?
-        (newPrice > oldPrice ? 'price-up' : 'price-down') :
-        '';
-
       let content;
       if (exchange === 'upbit' || exchange === 'bithumb') {
-        // 가격 숫자를 <span>으로 감싸고, 변동 클래스를 적용합니다.
-        content = price != null ? `<span class="price-main ${priceChangeClass}">${formatNumber(price, 0)}</span>` : '-';
+        content = price != null ? `<span class="price-main">${formatNumber(price, 0)}</span>` : '-';
       } else {
         if (price == null) {
           content = '-';
@@ -525,18 +519,19 @@
             const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
             premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
           }
-          content = `<span class="price-main ${priceChangeClass}">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+          content = `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
         }
       }
       cell.innerHTML = content;
 
-      // priceChangeClass가 적용된 경우, 잠시 후 클래스를 제거하여 깜빡임 효과를 만듭니다.
-      if (priceChangeClass) {
+      // 가격 변동이 있을 때 애니메이션 클래스를 적용하여 깜빡임 효과를 줍니다.
+      const isPriceChanged = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice);
+      if (isPriceChanged) {
         const priceSpan = cell.querySelector('.price-main');
         if (priceSpan) {
-          setTimeout(() => {
-            priceSpan.classList.remove('price-up', 'price-down');
-          }, 700);
+          const animationClass = newPrice > oldPrice ? 'price-up-animation' : 'price-down-animation';
+          priceSpan.classList.add(animationClass);
+          priceSpan.addEventListener('animationend', () => priceSpan.classList.remove(animationClass), { once: true });
         }
       }
     };
