@@ -344,30 +344,6 @@
     ).catch(() => ({}));
   }
 
-  async function getBinanceFundingRates() {
-    return fetchJson('https://fapi.binance.com/fapi/v1/premiumIndex').then(list =>
-      list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = {
-            rate: parseFloat(t.lastFundingRate),
-            time: parseInt(t.nextFundingTime)
-        };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
-  async function getOkxFundingRates() {
-    return fetchJson('https://www.okx.com/api/v5/public/funding-rate-current?instType=SWAP').then(res =>
-      (res.data || []).filter(t => t.instId.endsWith('-USDT-SWAP')).reduce((acc, t) => {
-        acc[t.instId.replace('-USDT-SWAP', '')] = {
-            rate: parseFloat(t.fundingRate),
-            time: parseInt(t.fundingTime)
-        };
-        return acc;
-      }, {})
-    ).catch(() => ({}));
-  }
-
   async function getUpbitMarkets() {
     const res = await fetch(UPBIT_MARKETS_URL);
     if (!res.ok) throw new Error('업비트 마켓 목록을 가져올 수 없습니다.');
@@ -493,10 +469,6 @@
     const row = allRows.find(r => r.name === symbol);
     if (!row) return;
 
-    const updatedExchange = Object.keys(newData)[0];
-    const newPrice = newData[updatedExchange];
-    const oldPrice = row[updatedExchange]; // 이전 가격 확인
-
     Object.assign(row, newData);
 
     const premiumBasePrice = premiumBase === 'bithumb' ? row.bithumb : row.upbit;
@@ -507,7 +479,7 @@
 
       let content;
       if (exchange === 'upbit' || exchange === 'bithumb') {
-        content = price != null ? `<span class="price-main">${formatNumber(price, 0)}</span>` : '-';
+        content = price != null ? formatNumber(price, 0) : '-';
       } else {
         if (price == null) {
           content = '-';
@@ -519,26 +491,16 @@
             const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
             premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
           }
-          content = `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+          content = `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
         }
       }
       cell.innerHTML = content;
-
-      // 가격 변동 시 숫자 색상 애니메이션 적용
-      const isPriceChanged = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice);
-      if (isPriceChanged) {
-        const priceSpan = cell.querySelector('.price-main');
-        if (priceSpan) {
-          const animationClass = newPrice > oldPrice ? 'price-up-animation' : 'price-down-animation';
-          priceSpan.classList.add(animationClass);
-          setTimeout(() => {
-            priceSpan.classList.remove(animationClass);
-          }, 700); // CSS 애니메이션 시간과 일치
-        }
-      }
+      cell.classList.add('price-flash');
+      setTimeout(() => cell.classList.remove('price-flash'), 700);
     };
 
     // 방금 업데이트된 가격 셀 업데이트
+    const updatedExchange = Object.keys(newData)[0];
     updateCell(updatedExchange, row[updatedExchange]);
 
     // 김프 기준가가 변경되었을 수 있으므로, 해당 코인의 모든 해외거래소 셀을 다시 계산하여 업데이트
@@ -562,7 +524,7 @@
     tbody.innerHTML = rows.map(r => {      
       const basePrice = r[premiumBase];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
-      const fmtKrw = v => v != null ? `<span class="price-main">${formatNumber(v, 0)}</span>` : '-';
+      const fmtKrw = v => v != null ? formatNumber(v, 0) : '-';
       
       const fmtOverseas = (price) => {
         if (price == null) return '-';
@@ -573,7 +535,7 @@
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
           premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
         }
-        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        return `${formatNumber(priceKrw, 0)}<span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
@@ -616,20 +578,15 @@
     const tbody = $('#funbi-table-body');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">펀딩비 데이터를 불러오는 중...</td></tr>';
     
-    // 펀비 데이터도 클라이언트에서 직접 호출 (서버 의존성 제거)
-    Promise.all([
-      fetch('/api/data').then(res => res.json()).catch(() => ({})), // Bitget, Gate, Hyperliquid 등은 서버 데이터 활용 (혹은 필요시 추가 구현)
-      getBinanceFundingRates(),
-      getBybitFuturesTickers(), // { price, funding, nextFundingTime } 반환
-      getOkxFundingRates()
-    ]).then(([serverData, binanceMap, bybitMap, okxMap]) => {
+    // 서버에서 모든 데이터를 가져와 펀비 데이터만 사용
+    fetch('/api/data').then(res => res.json()).then(data => {
       if (funbiTimer) clearInterval(funbiTimer);
 
       // 김프 비교 목록(allRows)과 동일한 코인만 표시
       const targetList = allRows.length > 0 ? allRows : [];
       
       // 다음 펀딩 시간 설정
-      const btcBybit = bybitMap['BTC'];
+      const btcBybit = data.bybitFuturesMap && data.bybitFuturesMap['BTC'];
       standardNextFundingTime = btcBybit ? btcBybit.nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
       
@@ -637,12 +594,12 @@
         const sym = row.name;
         return {
           name: sym,
-          binance: binanceMap[sym]?.rate ?? null,
-          bybit: bybitMap[sym]?.funding ?? null,
-          okx: okxMap[sym]?.rate ?? null,
-          bitget: serverData.bitgetFuturesMap?.[sym]?.funding ?? null,
-          gate: serverData.gateioFuturesMap?.[sym]?.funding ?? null,
-          hyperliquid: serverData.hyperliquidMap?.[sym]?.funding ?? null
+          binance: data.binanceFuturesMap[sym]?.funding ?? null,
+          bybit: data.bybitFuturesMap[sym]?.funding ?? null,
+          okx: data.okxFuturesMap[sym]?.funding ?? null,
+          bitget: data.bitgetFuturesMap[sym]?.funding ?? null,
+          gate: data.gateioFuturesMap[sym]?.funding ?? null,
+          hyperliquid: data.hyperliquidMap[sym]?.funding ?? null
         };
       }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || r.hyperliquid != null);
       
