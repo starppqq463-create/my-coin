@@ -530,7 +530,8 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        if (res.action === 'snapshot' && res.data) {
+        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
+        if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
             });
@@ -552,7 +553,8 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        if (res.action === 'snapshot' && res.data) {
+        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
+        if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
             });
