@@ -530,12 +530,7 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
-        if (res.ping) {
-            ws.send('pong');
-            return;
-        }
-        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
+        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. (클라이언트가 30초마다 ping을 보냅니다)
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget: parseFloat(t.lastPr) });
@@ -558,12 +553,7 @@
     };
     ws.onmessage = (e) => {
         const res = JSON.parse(e.data);
-        // 서버에서 보낸 ping에 대해 pong으로 응답하여 연결을 유지합니다.
-        if (res.ping) {
-            ws.send('pong');
-            return;
-        }
-        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. 둘 다 처리해야 실시간 업데이트가 됩니다.
+        // Bitget은 구독 시 'snapshot'을, 이후 'update'를 보냅니다. (클라이언트가 30초마다 ping을 보냅니다)
         if ((res.action === 'snapshot' || res.action === 'update') && res.data) {
             res.data.forEach(t => {
                 updateRowData(t.instId.replace('USDT', ''), { bitget_perp: parseFloat(t.lastPr) });
@@ -598,7 +588,7 @@
     ws.onclose = () => reconnect(name, () => connectGateioSocket(symbols));
     setInterval(() => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.ping' }));
-    }, 20000);
+    }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
   }
 
   function connectGateioFuturesSocket(symbols) {
@@ -626,7 +616,7 @@
     ws.onclose = () => reconnect(name, () => connectGateioFuturesSocket(symbols));
     setInterval(() => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
-    }, 20000);
+    }, 9000); // 10초 요구사항에 맞춰 9초마다 ping 전송
   }
 
   function connectHyperliquidFuturesSocket(symbols) {
@@ -639,6 +629,7 @@
 
     let ws;
     let pingInterval = null;
+    let subscribeInterval = null;
     let inactivityTimeout = null;
 
     const connect = () => {
@@ -648,6 +639,7 @@
         const cleanup = () => {
             clearInterval(pingInterval);
             clearTimeout(inactivityTimeout);
+            clearInterval(subscribeInterval);
         };
 
         const resetInactivityTimeout = () => {
@@ -674,7 +666,19 @@
                     method: 'subscribe',
                     subscription: { type: 'trades', coin }
                 }));
-            tradeSubscriptions.forEach(sub => ws.send(JSON.stringify(sub)));
+            
+            // 서버 부하를 줄이기 위해 구독 메시지를 순차적으로 보냅니다.
+            let i = 0;
+            subscribeInterval = setInterval(() => {
+                if (i < tradeSubscriptions.length) {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify(tradeSubscriptions[i]));
+                    }
+                    i++;
+                } else {
+                    clearInterval(subscribeInterval);
+                }
+            }, 20); // 20ms 간격으로 구독
 
             // 공식 문서에 따라, 클라이언트는 15초마다 ping을 보내 연결을 유지해야 합니다.
             pingInterval = setInterval(() => {

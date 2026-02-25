@@ -17,6 +17,8 @@ const BINANCE_DOMAINS = ['api.binance.com', 'api1.binance.com', 'api2.binance.co
 const BINANCE_FUTURES_DOMAINS = ['fapi.binance.com', 'fapi1.binance.com', 'fapi2.binance.com', 'fapi3.binance.com'];
 const BYBIT_DOMAINS = ['api.bybit.com', 'api.bytick.com'];
 const OKX_DOMAINS = ['www.okx.com', 'aws.okx.com'];
+const BITGET_DOMAINS = ['api.bitget.com']; // 일관성을 위해 배열로 관리
+const GATEIO_DOMAINS = ['api.gateio.ws', 'data.gate.io']; // 폴백 도메인 추가
 
 // 캐시 저장소 및 유효 시간
 const cache = { kimchi: null, funbi: null };
@@ -174,12 +176,17 @@ async function getHyperliquidTickers() {
     return combined;
 }
 async function getGateioTickers() {
-    const list = await fetchJson(GATEIO_TICKER_URL);
-    if (!list) return {};
-    return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
-        acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
-        return acc;
-    }, {});
+    for (const domain of GATEIO_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/api/v4/spot/tickers`, {}, 0);
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.currency_pair.endsWith('_USDT')).reduce((acc, t) => {
+                acc[t.currency_pair.replace('_USDT', '')] = parseFloat(t.last);
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Gate.io spot domains failed.`);
+    return {};
 }
 async function getBinanceFuturesTickers() {
     for (const domain of BINANCE_FUTURES_DOMAINS) {
@@ -253,36 +260,51 @@ async function getOkxFundingRates() {
     return {};
 }
 async function getBitgetFuturesTickers() {
-    const res = await fetchJson('https://api.bitget.com/api/v2/mix/market/tickers?productType=USDT-FUTURES');
-    if (!res || !res.data) return {};
-    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = {
-            price: parseFloat(t.lastPr),
-            funding: parseFloat(t.fundingRate),
-            nextFundingTime: parseInt(t.nextFundingTime)
-        };
-        return acc;
-    }, {});
+    for (const domain of BITGET_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/api/v2/mix/market/tickers?productType=USDT-FUTURES`, {}, 0);
+        if (res && res.data) {
+            return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = {
+                    price: parseFloat(t.lastPr),
+                    funding: parseFloat(t.fundingRate),
+                    nextFundingTime: parseInt(t.nextFundingTime)
+                };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Bitget futures domains failed.`);
+    return {};
 }
 async function getGateioFuturesTickers() {
-    const list = await fetchJson('https://api.gateio.ws/api/v4/futures/usdt/tickers');
-    if (!list) return {};
-    return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
-        acc[t.contract.replace('_USDT', '')] = {
-            price: parseFloat(t.last),
-            funding: parseFloat(t.funding_rate),
-            nextFundingTime: parseInt(t.funding_next_apply) * 1000
-        };
-        return acc;
-    }, {});
+    for (const domain of GATEIO_DOMAINS) {
+        const list = await fetchJson(`https://${domain}/api/v4/futures/usdt/tickers`, {}, 0);
+        if (list && Array.isArray(list)) {
+            return list.filter(t => t.contract.endsWith('_USDT')).reduce((acc, t) => {
+                acc[t.contract.replace('_USDT', '')] = {
+                    price: parseFloat(t.last),
+                    funding: parseFloat(t.funding_rate),
+                    nextFundingTime: parseInt(t.funding_next_apply) * 1000
+                };
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Gate.io futures domains failed.`);
+    return {};
 }
 async function getBitgetTickers() {
-    const res = await fetchJson('https://api.bitget.com/api/v2/spot/market/tickers');
-    if (!res || !res.data) return {};
-    return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
-        return acc;
-    }, {});
+    for (const domain of BITGET_DOMAINS) {
+        const res = await fetchJson(`https://${domain}/api/v2/spot/market/tickers`, {}, 0);
+        if (res && res.data) {
+            return res.data.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPr);
+                return acc;
+            }, {});
+        }
+    }
+    console.error(`[API] All Bitget spot domains failed.`);
+    return {};
 }
 
 // 메인 핸들러
