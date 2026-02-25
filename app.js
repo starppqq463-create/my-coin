@@ -476,7 +476,18 @@
     ws.onopen = () => {
       console.log(`${name} 웹소켓 연결 성공`);
       const args = symbols.map(s => `tickers.${s}USDT`);
-      ws.send(JSON.stringify({ op: 'subscribe', args }));
+      
+      // [수정] 한 번에 너무 많은 심볼을 구독하면 연결이 끊길 수 있으므로, 청크로 나누어 순차적으로 보냅니다.
+      const chunkSize = 10; // Bybit는 한 번에 10개씩 구독하는 것이 안정적입니다.
+      for (let i = 0; i < args.length; i += chunkSize) {
+          const chunk = args.slice(i, i + chunkSize);
+          setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+              }
+          }, (i / chunkSize) * 100); // 100ms 간격으로 전송
+      }
+
       pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
     };
     ws.onmessage = (e) => {
@@ -527,7 +538,18 @@
     ws.onopen = () => {
       console.log(`${name} 웹소켓 연결 성공`);
       const args = symbols.map(s => `tickers.${s}USDT`);
-      ws.send(JSON.stringify({ op: 'subscribe', args }));
+
+      // [수정] 현물과 동일하게, 선물도 안정성을 위해 순차적으로 구독 요청합니다.
+      const chunkSize = 10;
+      for (let i = 0; i < args.length; i += chunkSize) {
+          const chunk = args.slice(i, i + chunkSize);
+          setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+              }
+          }, (i / chunkSize) * 100);
+      }
+
       pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
     };
     ws.onmessage = (e) => {
