@@ -495,7 +495,7 @@
 
     const updatedExchange = Object.keys(newData)[0];
     const newPrice = newData[updatedExchange];
-    const oldPrice = row[updatedExchange];
+    const oldPrice = row[updatedExchange]; // 이전 가격 확인
 
     Object.assign(row, newData);
 
@@ -524,13 +524,16 @@
       }
       cell.innerHTML = content;
 
+      // 가격 변동 시 숫자 색상 애니메이션 적용
       const isPriceChanged = (exchange === updatedExchange && oldPrice != null && newPrice !== oldPrice);
       if (isPriceChanged) {
         const priceSpan = cell.querySelector('.price-main');
         if (priceSpan) {
           const animationClass = newPrice > oldPrice ? 'price-up-animation' : 'price-down-animation';
           priceSpan.classList.add(animationClass);
-          priceSpan.addEventListener('animationend', () => priceSpan.classList.remove(animationClass), { once: true });
+          setTimeout(() => {
+            priceSpan.classList.remove(animationClass);
+          }, 700); // CSS 애니메이션 시간과 일치
         }
       }
     };
