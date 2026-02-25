@@ -244,6 +244,24 @@
     }).catch(() => ({}));
   }
 
+  function getBybitTickers() {
+    return fetchJson(BYBIT_TICKER_URL).then(res =>
+      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
+  function getBybitFuturesTickers() {
+    return fetchJson(BYBIT_FUTURES_TICKER_URL).then(res =>
+      (res.result.list || []).filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
+        acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
+        return acc;
+      }, {})
+    ).catch(() => ({}));
+  }
+
   function getOkxTickers() {
     return fetchJson(OKX_TICKER_URL).then(res =>
       (res.data || []).filter(t => t.instId.endsWith('-USDT')).reduce((acc, t) => {
@@ -1437,15 +1455,20 @@
     const tbody = $('#table-body');
     tbody.innerHTML = '<tr><td colspan="17" class="loading">서버에서 데이터를 가져오는 중...</td></tr>';
     try {
-      // 1. 서버에서 모든 거래소의 데이터 스냅샷을 한번에 가져옵니다.
-      // 이 방식은 클라이언트에서 CORS 오류를 발생시키지 않으며, 데이터 로딩을 안정화합니다.
-      const data = await fetch('/api/data').then(res => {
-        if (!res.ok) {
-          // 서버에서 5xx 에러가 나면 Vercel 로그를 확인해야 함
-          throw new Error(`서버에서 데이터를 가져오지 못했습니다 (HTTP ${res.status})`);
-        }
-        return res.json();
-      });
+      // [수정] Bybit 데이터는 클라이언트에서 직접 가져와서 병합합니다. (서버 IP 차단 우회)
+      const [serverData, bybitMap, bybitFuturesMap] = await Promise.all([
+        fetch('/api/data').then(res => {
+          if (!res.ok) throw new Error(`서버 데이터 로딩 실패 (HTTP ${res.status})`);
+          return res.json();
+        }),
+        getBybitTickers(),
+        getBybitFuturesTickers()
+      ]);
+
+      // 데이터 병합
+      const data = serverData;
+      data.bybitMap = bybitMap;
+      data.bybitFuturesMap = bybitFuturesMap;
 
       // 2. 스냅샷 데이터로 테이블 채우기
       krwPerUsd = data.rate;

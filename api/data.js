@@ -83,24 +83,6 @@ async function fetchJson(url, options = {}, retries = 1) {
     }
 }
 
-// [수정] IP 차단을 우회하기 위한 새로운 프록시 요청 함수
-async function fetchJsonViaProxy(url) {
-    // cors.bridged.cc는 GET 요청만 지원하는 것으로 보입니다.
-    const proxyUrl = `https://cors.bridged.cc/${url}`;
-    try {
-        const response = await axios({
-            method: 'GET',
-            url: `${proxyUrl}`, // 프록시 URL에 타임스탬프 추가는 불필요할 수 있음
-            headers: { 'User-Agent': 'Mozilla/5.0', 'x-request-url': url },
-            timeout: 8000
-        });
-        return response.data;
-    } catch (error) {
-        console.error(`[API-PROXY] Proxy fetch failed for ${url}: ${error.message}`);
-        return null;
-    }
-}
-
 // 각 거래소 데이터 가져오는 함수들 (app.js에서 이동)
 async function getExchangeRate() {
     const data = await fetchJson(EXCHANGE_RATE_URL);
@@ -138,8 +120,7 @@ async function getBinanceTickers() {
 }
 async function getBybitTickers() {
     for (const domain of BYBIT_DOMAINS) {
-        // 서버 IP 차단을 우회하기 위해 프록시를 통해 요청합니다.
-        const res = await fetchJsonViaProxy(`https://${domain}/v5/market/tickers?category=spot`);
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
                 acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
@@ -231,8 +212,7 @@ async function getBinanceFundingRates() {
 }
 async function getBybitFuturesTickers() {
     for (const domain of BYBIT_DOMAINS) {
-        // 서버 IP 차단을 우회하기 위해 프록시를 통해 요청합니다.
-        const res = await fetchJsonViaProxy(`https://${domain}/v5/market/tickers?category=linear`);
+        const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
                 acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
@@ -325,13 +305,13 @@ module.exports = async (req, res) => {
             getUpbitTickers(upbitMarketBatch), // 1
             getBithumbTickers(),            // 2
             getBinanceTickers(),            // 3: 서버에서 직접 호출
-            getBybitTickers(),              // 4: 서버에서 직접 호출
+            Promise.resolve(null),          // 4: Bybit 현물 (클라이언트에서 처리)
             getOkxTickers(),                // 5
             getBitgetTickers(),             // 6
             getGateioTickers(),             // 7
             getHyperliquidTickers(),        // 8
             getBinanceFuturesTickers(),     // 9: 서버에서 직접 호출
-            getBybitFuturesTickers(),       // 10: 서버에서 직접 호출
+            Promise.resolve(null),          // 10: Bybit 선물 (클라이언트에서 처리)
             getOkxFuturesTickers(),         // 11
             getBitgetFuturesTickers(),      // 12
             getGateioFuturesTickers(),      // 13
