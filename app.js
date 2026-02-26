@@ -186,6 +186,7 @@
   let funbiSortKey = 'name';
   let funbiSortAsc = true;
   let funbiTimer = null;
+  let funbiSocketsConnected = false;
   let standardNextFundingTime = null;
   let hyperliquidNextFundingTime = null;
   let krwPerUsd = 1350;
@@ -824,6 +825,100 @@
     connect(); // 재귀적으로 재연결되는 함수를 최초 실행합니다.
   }
 
+  function updateFunbiRowData(symbol, newData) {
+    const row = funbiRows.find(r => r.name === symbol);
+    if (!row) return;
+
+    const oldValues = {};
+    for (const key in newData) {
+        oldValues[key] = row[key];
+    }
+
+    Object.assign(row, newData);
+
+    const fmtRate = (val) => {
+        if (val == null || isNaN(val)) return '-';
+        const pct = (val * 100).toFixed(4) + '%';
+        const colorClass = val > 0 ? 'positive' : (val < 0 ? 'negative' : '');
+        return `<span class="${colorClass}">${pct}</span>`;
+    };
+
+    for (const [exchange, value] of Object.entries(newData)) {
+        const cell = $(`#funbi-cell-${exchange}-${symbol}`);
+        if (cell) {
+            cell.innerHTML = fmtRate(value);
+            
+            const oldValue = oldValues[exchange];
+            if (oldValue != null && value !== oldValue) {
+                // 펀비 업데이트 시 깜빡임 효과 추가
+                cell.classList.add('price-flash');
+                setTimeout(() => cell.classList.remove('price-flash'), 700);
+            }
+        }
+    }
+  }
+
+  function connectBinanceFundingSocket(symbols) {
+    const name = 'BinanceFunding';
+    if (sockets[name]) sockets[name].close();
+    const streams = symbols.map(s => `${s.toLowerCase()}usdt@markPrice`).join('/');
+    const ws = new WebSocket(`wss://fstream.binance.com/stream?streams=${streams}`);
+    sockets[name] = ws;
+    ws.onopen = () => console.log(`${name} 웹소켓 연결 성공`);
+    ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.data && msg.data.s) {
+            const symbol = msg.data.s.replace('USDT', '');
+            updateFunbiRowData(symbol, { binance: parseFloat(msg.data.r) });
+        }
+    };
+    ws.onclose = () => reconnect(name, () => connectBinanceFundingSocket(symbols));
+  }
+
+  function connectBybitFundingSocket(symbols) {
+    const name = 'BybitFunding';
+    if (sockets[name]) { sockets[name].onclose = null; sockets[name].close(); }
+    const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
+    sockets[name] = ws;
+    let pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => `tickers.${s}USDT`);
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        const t = JSON.parse(e.data);
+        if (t.topic && t.topic.startsWith('tickers') && t.data && typeof t.data.fundingRate !== 'undefined') {
+            updateFunbiRowData(t.data.symbol.replace('USDT', ''), { bybit: parseFloat(t.data.fundingRate) });
+        }
+    };
+    ws.onclose = () => { clearInterval(pingInterval); reconnect(name, () => connectBybitFundingSocket(symbols)); };
+    ws.onerror = (err) => { console.error(`${name} 웹소켓 오류 발생:`, err); ws.close(); };
+  }
+
+  function connectOkxFundingSocket(symbols) {
+    const name = 'OKXFunding';
+    if (sockets[name]) sockets[name].close();
+    const ws = new WebSocket('wss://ws.okx.com:8443/ws/v5/public');
+    sockets[name] = ws;
+    let pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+    ws.onopen = () => {
+        console.log(`${name} 웹소켓 연결 성공`);
+        const args = symbols.map(s => ({ channel: 'funding-rate', instId: `${s}-USDT-SWAP` }));
+        ws.send(JSON.stringify({ op: 'subscribe', args }));
+    };
+    ws.onmessage = (e) => {
+        if (e.data === 'pong') return;
+        const res = JSON.parse(e.data);
+        if (res.data) {
+            res.data.forEach(item => {
+                updateFunbiRowData(item.instId.replace('-USDT-SWAP', ''), { okx: parseFloat(item.fundingRate) });
+            });
+        }
+    };
+    ws.onclose = () => { clearInterval(pingInterval); reconnect(name, () => connectOkxFundingSocket(symbols)); };
+  }
+
   function updateRowData(symbol, newData) {
     const row = allRows.find(r => r.name === symbol);
     if (!row) return;
@@ -949,40 +1044,51 @@
   function loadFunbi() {
     const tbody = $('#funbi-table-body');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">펀딩비 데이터를 불러오는 중...</td></tr>';
-    
-    // 서버에서 모든 데이터를 가져와 펀비 데이터만 사용
+
+    // 서버에서 Bitget, Gate, Hyperliquid 등 나머지 거래소 데이터를 가져옵니다.
     fetch('/api/data').then(res => res.json()).then(data => {
       if (funbiTimer) clearInterval(funbiTimer);
 
-      // 김프 비교 목록(allRows)과 동일한 코인만 표시
+      // 김프 비교 목록(allRows)과 동일한 코인을 기준으로 테이블을 구성합니다.
       const targetList = allRows.length > 0 ? allRows : [];
-      
-      // 다음 펀딩 시간 설정
-      const btcBybit = data.bybitFuturesMap && data.bybitFuturesMap['BTC'];
-      standardNextFundingTime = btcBybit ? btcBybit.nextFundingTime : null;
+
+      // 다음 펀딩 시간 설정 (서버에서 가져온 데이터 중 하나를 기준으로)
+      const gateData = data.gateioFuturesMap && data.gateioFuturesMap['BTC'];
+      standardNextFundingTime = gateData ? gateData.nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
-      
+
       funbiRows = targetList.map(row => {
         const sym = row.name;
         return {
           name: sym,
-          binance: data.binanceFuturesMap[sym]?.funding ?? null,
-          bybit: data.bybitFuturesMap[sym]?.funding ?? null,
-          okx: data.okxFuturesMap[sym]?.funding ?? null,
+          // Binance, Bybit, OKX는 웹소켓으로 채울 것이므로 초기값은 null로 설정합니다.
+          binance: null,
+          bybit: null,
+          okx: null,
+          // 나머지 거래소는 서버 데이터 사용
           bitget: data.bitgetFuturesMap[sym]?.funding ?? null,
           gate: data.gateioFuturesMap[sym]?.funding ?? null,
           hyperliquid: data.hyperliquidMap[sym]?.funding ?? null
         };
-      }).filter(r => r.binance != null || r.bybit != null || r.okx != null || r.bitget != null || r.gate != null || r.hyperliquid != null);
-      
-      applyFunbiSortAndFilter();
+      });
+
+      applyFunbiSortAndFilter(); // 테이블 구조를 먼저 렌더링합니다.
       updateFunbiTimers();
 
       funbiTimer = setInterval(() => {
-          if ($('#section-funbi').classList.contains('active')) {
-              updateFunbiTimers();
-          }
+        if ($('#section-funbi').classList.contains('active')) {
+          updateFunbiTimers();
+        }
       }, 1000);
+
+      // 웹소켓은 한 번만 연결합니다.
+      if (!funbiSocketsConnected) {
+        const symbols = funbiRows.map(r => r.name);
+        connectBinanceFundingSocket(symbols);
+        connectBybitFundingSocket(symbols);
+        connectOkxFundingSocket(symbols);
+        funbiSocketsConnected = true;
+      }
     }).catch(e => {
       if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="loading">펀딩비 데이터 로딩 실패: ${e.message}</td></tr>`;
     });
@@ -1047,17 +1153,17 @@
         const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
         const imgUrl = getCoinIconUrl(r.name);
         return `
-            <tr>
+            <tr data-symbol="${r.name}">
                 <td class="name">
                     <img class="coin-icon" src="${imgUrl}" alt="" referrerpolicy="no-referrer" onerror="this.src='${COIN_IMG_FALLBACK}'">
                     <div><span class="coin-name">${r.name}</span><span class="coin-korean-name">${displayName}</span></div>
                 </td>
-                <td class="text-right">${fmtRate(r.binance)}</td>
-                <td class="text-right">${fmtRate(r.bybit)}</td>
-                <td class="text-right">${fmtRate(r.okx)}</td>
-                <td class="text-right">${fmtRate(r.bitget)}</td>
-                <td class="text-right">${fmtRate(r.gate)}</td>
-                <td class="text-right">${fmtRate(r.hyperliquid)}</td>
+                <td id="funbi-cell-binance-${r.name}" class="text-right">${fmtRate(r.binance)}</td>
+                <td id="funbi-cell-bybit-${r.name}" class="text-right">${fmtRate(r.bybit)}</td>
+                <td id="funbi-cell-okx-${r.name}" class="text-right">${fmtRate(r.okx)}</td>
+                <td id="funbi-cell-bitget-${r.name}" class="text-right">${fmtRate(r.bitget)}</td>
+                <td id="funbi-cell-gate-${r.name}" class="text-right">${fmtRate(r.gate)}</td>
+                <td id="funbi-cell-hyperliquid-${r.name}" class="text-right">${fmtRate(r.hyperliquid)}</td>
             </tr>
         `;
     }).join('');
