@@ -16,7 +16,7 @@
   const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 
   // 고래 추적 설정
-  const WHALE_THRESHOLD_USD = 100000; // 100만 달러 이상 감지
+  const WHALE_THRESHOLD_USD = 1000000; // 100만 달러 이상 감지
 
   /** 메인 코인 우선 순서 (업비트 KRW 상장 심볼 기준, 시총 상위 150개 근사치) */
   const MAIN_SYMBOLS = [
@@ -1233,35 +1233,24 @@
   let whalePage = 1;
   let whaleItemsPerPage = 10;
 
-  function updateStatus(chain, isConnected, msg) {
-    let statusContainer = document.getElementById('whale-status-container');
-    if (!statusContainer) {
-      const table = document.getElementById('whale-table-body')?.closest('table');
-      if (table) {
-        statusContainer = document.createElement('div');
-        statusContainer.id = 'whale-status-container';
-        statusContainer.style.cssText = 'padding: 10px; margin-bottom: 10px; background-color: #1e2329; border-radius: 4px; font-size: 12px; color: #848e9c; display: flex; justify-content: space-between; align-items: center;';
-        table.parentNode.insertBefore(statusContainer, table);
-      }
-    }
+  function updateStatus(chain, isConnected) {
+    const statusContainer = document.querySelector('.whale-status-bar');
+    if (!statusContainer) return;
 
     // 전역 상태 객체 초기화
-    if (!window.whaleStatus) window.whaleStatus = { BTC: false, ETH: false, ARB: false, SOL: false, msg: '초기화 중...' };
+    if (!window.whaleStatus) window.whaleStatus = { BTC: false, ETH: false, ARB: false, SOL: false };
     
     // 상태 업데이트
     window.whaleStatus[chain.toUpperCase()] = isConnected;
-    if (msg) window.whaleStatus.msg = msg;
-    else if (isConnected) window.whaleStatus.msg = '정상 작동 중';
 
     // UI 렌더링
-    if (statusContainer) {
-      const statusHtml = ['BTC', 'ETH', 'ARB', 'SOL'].map(k => {
-        const color = window.whaleStatus[k] ? '#14f195' : '#f6465d';
-        return `<span style="margin-right: 12px; font-weight: bold;"><span style="color:${color}">●</span> ${k}</span>`;
-      }).join('');
-      
-      statusContainer.innerHTML = `<div>${statusHtml}</div><div style="color:#f0b90b; max-width: 60%; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${window.whaleStatus.msg}</div>`;
-    }
+    const statusHtml = ['BTC', 'ETH', 'ARB', 'SOL'].map(k => {
+      const color = window.whaleStatus[k] ? '#14f195' : '#f6465d';
+      // 텍스트를 제거하고, 마우스 오버 시 툴팁으로 체인 이름을 보여줍니다.
+      return `<span style="margin-right: 8px;" title="${k}"><span style="color:${color}; font-size: 1.5em; line-height: 1;">●</span></span>`;
+    }).join('');
+    
+    statusContainer.innerHTML = statusHtml;
   }
 
   // RPC 목록 (장애 시 자동 전환)
@@ -1454,7 +1443,7 @@
 
     isProcessingSolTx = true;
     const signature = solTxQueue.shift();
-    updateStatus('sol', true, `트랜잭션 ${signature.substring(0,8)}... 처리 중`);
+    updateStatus('sol', true);
     
     await processSolTransaction(signature);
 
@@ -1497,7 +1486,7 @@
               } catch (e) {
                   lastError = e;
                   if (e.message === "null result" && attempt < 3) {
-                      updateStatus('sol', true, `데이터 동기화 대기... (${attempt}/3)`);
+                      updateStatus('sol', true);
                       await new Promise(r => setTimeout(r, 1000 * attempt)); // 1초, 2초 대기
                   } else {
                       // 다른 종류의 에러는 즉시 중단
@@ -1514,8 +1503,7 @@
           parseSolTransaction(txData);
 
       } catch (e) {
-          const errorMessage = e.name === 'AbortError' ? '요청 시간 초과' : e.message;
-          updateStatus('sol', true, `조회 실패: ${errorMessage}`);
+          updateStatus('sol', true);
           solHttpRpcIndex = (solHttpRpcIndex + 1) % RPC_LIST.SOL.length;
           console.warn(`Solana getTransaction failed for sig ${signature}. Error: ${e.message}. Switching to RPC index ${solHttpRpcIndex}`);
       } finally {
@@ -1581,7 +1569,7 @@
 
     whaleSocketSol.onopen = () => {
       console.log(`SOL WS connected to ${wssUrl}. Subscribing to logs...`);
-      updateStatus('sol', true, 'SOL 연결됨. 데이터 수신 대기 중...');
+      updateStatus('sol', true);
       // 'logsSubscribe'를 사용하여 SOL, USDC, USDT 전송 관련 로그를 실시간으로 받습니다.
       whaleSocketSol.send(JSON.stringify({
         "jsonrpc": "2.0",
@@ -1603,7 +1591,7 @@
       try {
           const data = JSON.parse(msg.data);
           if (data.result && data.id === 1) {
-              updateStatus('sol', true, 'SOL 구독 성공. 모니터링 시작.');
+              updateStatus('sol', true);
               return;
           }
           if (data.method === 'logsNotification' && data.params && data.params.result) {
@@ -1612,7 +1600,7 @@
               if (solTxQueue.length < 100) {
                   solTxQueue.push(signature);
               } else {
-                  updateStatus('sol', true, '트래픽 폭주: 일부 데이터 생략');
+                  console.warn('SOL WS queue is full, dropping transaction.');
               }
           }
       } catch (e) {
@@ -1621,7 +1609,7 @@
     };
 
     whaleSocketSol.onclose = () => {
-      updateStatus('sol', false, 'SOL 연결 끊김. 재연결 시도...');
+      updateStatus('sol', false);
       whaleSocketSol = null;
       solWssRpcIndex = (solWssRpcIndex + 1) % WSS_RPC_LIST.SOL.length;
       console.warn(`SOL WS closed. Switching to next WSS RPC: ${WSS_RPC_LIST.SOL[solWssRpcIndex]}`);
@@ -1629,7 +1617,7 @@
     };
 
     whaleSocketSol.onerror = (err) => {
-      updateStatus('sol', false, 'SOL 소켓 에러 발생');
+      updateStatus('sol', false);
       whaleSocketSol.close(); // 에러 발생 시 연결을 닫아 onclose 핸들러가 재연결을 시도하도록 합니다.
     };
   }

@@ -330,25 +330,20 @@
         <div class="section-header">
           <h2>실시간 고래 추적</h2>
           <div style="display:flex; flex-direction:column; align-items:flex-end;">
-            <p style="margin:0;">주요 네트워크 대규모 이체 감지 (5만 달러↑)</p>
+            <p style="margin:0;">주요 네트워크 대규모 이체 감지 (100만 달러↑)</p>
             <div class="whale-status-bar">
-              <span><span class="status-dot" id="status-btc"></span>BTC</span>
-              <span><span class="status-dot" id="status-eth"></span>ETH/ARB</span>
-              <span><span class="status-dot" id="status-xrp"></span>XRP</span>
-              <span><span class="status-dot" id="status-sol"></span>SOL</span>
+              <!-- Status dots are injected by app.js -->
             </div>
           </div>
         </div>
         <div class="toolbar" style="justify-content: flex-start;">
           <select id="whale-filter" class="search-input" style="width: 140px; cursor: pointer;">
             <option value="ALL">전체 보기</option>
-            <option value="BTC">BTC (비트코인)</option>
-            <option value="ETH">ETH (이더리움)</option>
-            <option value="ARB">ARB (아비트럼)</option>
-            <option value="SOL">SOL (솔라나)</option>
-            <option value="XRP">XRP (리플)</option>
-            <option value="USDT">USDT (ERC20)</option>
-            <option value="USDC">USDC (스테이블)</option>
+            <option value="BTC">BTC</option>
+            <option value="ETH">ETH</option>
+            <option value="SOL">SOL</option>
+            <option value="USDT">USDT</option>
+            <option value="USDC">USDC</option>
           </select>
         </div>
         <div class="table-wrap">
