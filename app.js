@@ -1490,69 +1490,52 @@
 
   function parseSolTransaction(txData) {
       // 트랜잭션 성공 시에만 파싱 진행
-      if (!txData || !txData.meta || txData.meta.err) return;
+      if (!txData || !txData.meta || !txData.meta.err) return;
   
       const signature = txData.transaction.signatures[0];
       const solRow = allRows.find(r => r.name === 'SOL');
-      const solPrice = solRow?.binance || 150;
+      const solPrice = solRow?.binance || 150; // 실시간 가격 없으면 150달러로 대체
   
-      const instructions = txData.transaction.message.instructions;
-      if (!instructions) return;
-  
-      const accountKeys = txData.transaction.message.accountKeys.map(acc => acc.pubkey);
-  
-      for (const inst of instructions) {
-          if (!inst.parsed) continue;
-  
-          let symbol = null;
-          let amount = 0;
-          let valueUsd = 0;
-  
-          // 1. 네이티브 SOL 이체 감지
-          if (inst.program === 'system' && inst.parsed.type === 'transfer') {
-              symbol = 'SOL';
+      // 방법 1: 네이티브 SOL 이체 감지 (가장 간단하고 확실)
+      txData.transaction.message.instructions.forEach(inst => {
+          if (inst.program === 'system' && inst.parsed && inst.parsed.type === 'transfer') {
               const lamports = inst.parsed.info.lamports;
-              amount = lamports / 1e9;
-              valueUsd = amount * solPrice;
-          }
-          // 2. SPL 토큰(USDC, USDT) 이체 감지
-          else if (inst.program === 'spl-token' && (inst.parsed.type === 'transfer' || inst.parsed.type === 'transferChecked')) {
-              const info = inst.parsed.info;
-              let mint = info.mint; // 'transferChecked'는 mint를 포함
-  
-              // 'transfer'는 mint가 없으므로, source 계정의 mint를 찾아야 함
-              if (!mint && info.source) {
-                  const sourceAccountAddress = info.source;
-                  const sourceAccountIndex = accountKeys.indexOf(sourceAccountAddress);
-                  if (sourceAccountIndex !== -1) {
-                      // preTokenBalances에서 해당 계정의 mint 정보를 찾음
-                      const tokenBalanceInfo = txData.meta.preTokenBalances.find(b => b.accountIndex === sourceAccountIndex);
-                      if (tokenBalanceInfo) {
-                          mint = tokenBalanceInfo.mint;
-                      }
-                  }
-              }
-  
-              if (mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') symbol = 'USDC';
-              else if (mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') symbol = 'USDT';
-  
-              if (symbol) {
-                  const decimals = info.tokenAmount?.decimals ?? 6;
-                  const rawAmount = info.tokenAmount?.amount || info.amount;
-                  if (rawAmount) {
-                      amount = parseInt(rawAmount, 10) / Math.pow(10, decimals);
-                      valueUsd = amount; // 스테이블 코인은 가치가 수량과 동일
-                  }
+              const amount = lamports / 1e9;
+              const valueUsd = amount * solPrice;
+              if (valueUsd >= WHALE_THRESHOLD_USD) {
+                  const hashShort = signature.substring(0, 8) + '...';
+                  const explorerUrl = 'https://solscan.io/tx/' + signature;
+                  const infoHtml = `<a href="${explorerUrl}" target="_blank" style="color:#848e9c; text-decoration:underline;">${hashShort}</a>`;
+                  addWhaleRow('SOL', amount, valueUsd, infoHtml);
               }
           }
-  
-          if (symbol && valueUsd >= WHALE_THRESHOLD_USD) {
-              const hashShort = signature.substring(0, 8) + '...';
-              const explorerUrl = 'https://solscan.io/tx/' + signature;
-              const infoHtml = `<a href="${explorerUrl}" target="_blank" style="color:#848e9c; text-decoration:underline;">${hashShort}</a>`;
-              addWhaleRow(symbol, amount, valueUsd, infoHtml);
+      });
+
+      // 방법 2: SPL 토큰(USDC, USDT) 이체 감지 (pre/post 잔액 비교로 복잡한 트랜잭션도 감지)
+      // 이것이 test.html에서 사용된 핵심 로직입니다.
+      const preBalances = new Map(
+          txData.meta.preTokenBalances.map(b => [b.accountIndex, b.uiTokenAmount?.uiAmount || 0])
+      );
+
+      txData.meta.postTokenBalances.forEach(post => {
+          const preAmount = preBalances.get(post.accountIndex) || 0;
+          const postAmount = post.uiTokenAmount?.uiAmount || 0;
+          const diff = postAmount - preAmount;
+
+          if (diff > 0) { // 토큰을 받은 계정만 확인
+              let symbol = null;
+              if (post.mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') symbol = 'USDC';
+              else if (post.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') symbol = 'USDT';
+
+              if (symbol && diff >= WHALE_THRESHOLD_USD) {
+                  const valueUsd = diff; // 스테이블코인은 수량이 곧 가치
+                  const hashShort = signature.substring(0, 8) + '...';
+                  const explorerUrl = 'https://solscan.io/tx/' + signature;
+                  const infoHtml = `<a href="${explorerUrl}" target="_blank" style="color:#848e9c; text-decoration:underline;">${hashShort}</a>`;
+                  addWhaleRow(symbol, diff, valueUsd, infoHtml);
+              }
           }
-      }
+      });
   }
 
   function startSolTracker() {
