@@ -884,7 +884,18 @@
     ws.onopen = () => {
         console.log(`${name} 웹소켓 연결 성공`);
         const args = symbols.map(s => `tickers.${s}USDT`);
-        ws.send(JSON.stringify({ op: 'subscribe', args }));
+
+        // Bybit는 한 번에 많은 심볼을 구독하면 연결을 끊을 수 있으므로, 10개씩 나누어 순차적으로 요청합니다.
+        const chunkSize = 10;
+        for (let i = 0; i < args.length; i += chunkSize) {
+            const chunk = args.slice(i, i + chunkSize);
+            setTimeout(() => {
+                // 재연결 도중 연결이 끊어지는 경우를 대비해 readyState를 다시 확인합니다.
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+                }
+            }, (i / chunkSize) * 100); // 100ms 간격으로 전송
+        }
     };
     ws.onmessage = (e) => {
         const t = JSON.parse(e.data);
