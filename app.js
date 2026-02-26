@@ -416,7 +416,8 @@
       console.log(`${name} 웹소켓 연결 성공`);
       ws.send(JSON.stringify([
         { ticket: 'kimchi-premium-monitor' },
-        { type: 'ticker', codes: markets }
+        // 'ticker' 타입보다 'trade' 타입이 더 빠른 실시간 체결 데이터를 제공합니다.
+        { type: 'trade', codes: markets }
       ]));
     };
     ws.onmessage = async (e) => {
@@ -435,12 +436,16 @@
     ws.onopen = () => {
       console.log(`${name} 웹소켓 연결 성공`);
       const krwSymbols = symbols.map(s => `${s}_KRW`);
-      ws.send(JSON.stringify({ type: 'ticker', symbols: krwSymbols, tickTypes: ['MID'] }));
+      // 'ticker'의 'MID' 타입보다 'transaction' 타입이 더 빠른 실시간 체결 데이터를 제공합니다.
+      ws.send(JSON.stringify({ type: 'transaction', symbols: krwSymbols }));
     };
     ws.onmessage = (e) => {
       const t = JSON.parse(e.data);
-      if (t.type === 'ticker' && t.content) {
-        updateRowData(t.content.symbol.replace('_KRW', ''), { bithumb: parseFloat(t.content.closePrice) });
+      // 'transaction' 타입의 메시지를 처리합니다.
+      if (t.type === 'transaction' && t.content && t.content.list) {
+        t.content.list.forEach(tx => {
+            updateRowData(tx.symbol.replace('_KRW', ''), { bithumb: parseFloat(tx.contPrice) });
+        });
       }
     };
     ws.onclose = () => reconnect(name, () => connectBithumbSocket(symbols));
