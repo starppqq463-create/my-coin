@@ -1081,9 +1081,9 @@
     fetch('/api/data').then(res => res.json()).then(data => {
       if (funbiTimer) clearInterval(funbiTimer);
 
-      // 다음 펀딩 시간 설정 (서버에서 가져온 데이터 중 하나를 기준으로)
-      const gateData = data.gateioFuturesMap && data.gateioFuturesMap['BTC'];
-      standardNextFundingTime = gateData ? gateData.nextFundingTime : null;
+      // 다음 펀딩 시간 설정 (바이낸스 시간을 기준으로 통일)
+      const binanceData = data.binanceFuturesMap && data.binanceFuturesMap['BTC'];
+      standardNextFundingTime = binanceData ? binanceData.nextFundingTime : null;
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
 
       // 가져온 데이터로 funbiRows를 업데이트합니다.

@@ -360,10 +360,9 @@ module.exports = async (req, res) => {
         const okxFunding = getValue(results[13], {});
 
         for (const symbol in binanceFunding) {
-            if (allData.binanceFuturesMap[symbol]) {
-                allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
-                allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
-            }
+            if (!allData.binanceFuturesMap[symbol]) allData.binanceFuturesMap[symbol] = {};
+            allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
+            allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
         }
         for (const symbol in okxFunding) {
             if (allData.okxFuturesMap[symbol]) {
