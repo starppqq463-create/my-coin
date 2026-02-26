@@ -559,9 +559,9 @@
       }
     };
     ws.onclose = () => {
-        console.log(`${name} 웹소켓 연결이 끊겼습니다. 0.5초 후 재연결합니다.`);
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 3초 후 재연결합니다.`);
         cleanup();
-        setTimeout(() => connectBybitFuturesSocket(symbols), 500);
+        setTimeout(() => connectBybitFuturesSocket(symbols), 3000);
     };
     ws.onerror = (err) => {
         console.error(`${name} 웹소켓 오류 발생:`, err);
