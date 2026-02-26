@@ -201,7 +201,7 @@
 
   function formatPercent(n) {
     if (n == null || isNaN(n)) return '-';
-    const s = Number(n).toFixed(2);
+    const s = Number(n).toFixed(4);
     return (Number(n) >= 0 ? '+' : '') + s + '%';
   }
 
@@ -1700,6 +1700,39 @@
     }
   }
 
+  function injectAnimationStyles() {
+    const style = document.createElement('style');
+    style.id = 'price-animation-styles';
+    if (document.getElementById(style.id)) return;
+
+    style.textContent = `
+      .price-main.price-up-animation {
+        animation: price-up 0.7s ease-out;
+      }
+      .price-main.price-down-animation {
+        animation: price-down 0.7s ease-out;
+      }
+      @keyframes price-up {
+        from { background-color: rgba(20, 241, 149, 0.3); }
+        to { background-color: transparent; }
+      }
+      @keyframes price-down {
+        from { background-color: rgba(246, 70, 93, 0.3); }
+        to { background-color: transparent; }
+      }
+      /* Light Theme Overrides */
+      .light-theme .price-main.price-up-animation {
+        animation-name: price-up-light;
+      }
+      .light-theme .price-main.price-down-animation {
+        animation-name: price-down-light;
+      }
+      @keyframes price-up-light { from { background-color: rgba(20, 241, 149, 0.4); } to { background-color: transparent; } }
+      @keyframes price-down-light { from { background-color: rgba(246, 70, 93, 0.4); } to { background-color: transparent; } }
+    `;
+    document.head.appendChild(style);
+  }
+
   function init() {
     const searchEl = $('#search');
     const refreshBtn = $('#btn-refresh');
@@ -1897,6 +1930,7 @@
     });
 
     setupSort();
+    injectAnimationStyles();
     initKimchiPremium();
     initWhaleTracker(); // 고래 추적 시작
   }
