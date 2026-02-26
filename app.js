@@ -1227,7 +1227,6 @@
   // --- 고래 추적 기능 ---
   let whaleSocket = null;
   let whaleSocketXrp = null;
-  let whaleSocketSol = null;
   let evmSockets = [];
   let whaleData = []; // 고래 데이터 저장소
   let whalePage = 1;
@@ -1408,83 +1407,31 @@
     }
   }
 
-  // 3. SOL (솔라나) - logsSubscribe + getTransaction 방식으로 변경
+  // 3. SOL (솔라나) - 최근 블록 스캔 (HTTP RPC) 방식으로 변경
   let solHttpRpcIndex = 0; // HTTP RPC 인덱스
-  let solWssRpcIndex = 0; // WebSocket RPC 인덱스
-  const solTxQueue = [];     // 트랜잭션 서명 대기열
-  let isProcessingSolTx = false; // 처리 중 플래그
+  let lastProcessedSolSlot = 0;
+  const processedSolSignatures = new Set(); // 중복 처리 방지
 
-  // [근본 해결책] 대기열 순차 처리: 한 번에 하나씩 트랜잭션을 처리하여 RPC 부하 및 IP 차단 방지
-  async function solanaTransactionProcessor() {
-    if (isProcessingSolTx || solTxQueue.length === 0) {
-      setTimeout(solanaTransactionProcessor, 500); // 0.5초 후 다시 체크
-      return;
-    }
-
-    isProcessingSolTx = true;
-    const signature = solTxQueue.shift();
-    
-    await processSolTransaction(signature);
-
-    isProcessingSolTx = false;
-    setTimeout(solanaTransactionProcessor, 500); // 처리 완료 후 0.5초 대기 (RPC Rate Limit 준수)
-  }
-
-  async function processSolTransaction(signature) {
+  async function fetchSolanaRpc(body) {
+      const rpcUrl = RPC_LIST.SOL[solHttpRpcIndex];
       try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000); // 전체 타임아웃 8초
-
-          let txData = null;
-          let lastError = null;
-
-          // 데이터 동기화 지연을 해결하기 위한 동적 재시도 로직
-          for (let attempt = 1; attempt <= 3; attempt++) {
-              try {
-                  const rpcUrl = RPC_LIST.SOL[solHttpRpcIndex];
-                  const response = await fetch(rpcUrl, {
-                      signal: controller.signal,
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                          jsonrpc: "2.0", id: 1, method: "getTransaction",
-                          params: [signature, { "encoding": "jsonParsed", "maxSupportedTransactionVersion": 0 }]
-                      })
-                  });
-
-                  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                  const res = await response.json();
-                  if (res.error) throw new Error(`RPC ${res.error.code}`);
-                  
-                  // 데이터가 아직 전파되지 않은 경우 'null'이 올 수 있음
-                  if (!res.result) throw new Error("null result");
-
-                  txData = res.result; // 성공 시 데이터 할당하고 루프 탈출
-                  break;
-
-              } catch (e) {
-                  lastError = e;
-                  if (e.message === "null result" && attempt < 3) {                      
-                      await new Promise(r => setTimeout(r, 1000 * attempt)); // 1초, 2초 대기
-                  } else {
-                      // 다른 종류의 에러는 즉시 중단
-                      throw e;
-                  }
-              }
-          }
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          const response = await fetch(rpcUrl, {
+              signal: controller.signal,
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+          });
           clearTimeout(timeoutId);
-
-          if (!txData) {
-              throw lastError || new Error("데이터 조회 최종 실패");
-          }
-
-          parseSolTransaction(txData);
-
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const res = await response.json();
+          if (res.error) throw new Error(`RPC Error: ${res.error.message}`);
+          return res.result;
       } catch (e) {
           solHttpRpcIndex = (solHttpRpcIndex + 1) % RPC_LIST.SOL.length;
-          console.warn(`Solana getTransaction failed for sig ${signature}. Error: ${e.message}. Switching to RPC index ${solHttpRpcIndex}`);
-      } finally {
-          // isProcessingSolTx is handled by the processor loop
+          console.warn(`Solana RPC ${rpcUrl} failed, switching to index ${solHttpRpcIndex}. Error: ${e.message}`);
+          throw e;
       }
   }
 
@@ -1494,7 +1441,7 @@
   
       const signature = txData.transaction.signatures[0];
       const solRow = allRows.find(r => r.name === 'SOL');
-      const solPrice = solRow?.binance || 150; // 실시간 가격 없으면 150달러로 대체
+      const solPrice = solRow?.binance || 150;
   
       // 방법 1: 네이티브 SOL 이체 감지 (가장 간단하고 확실)
       txData.transaction.message.instructions.forEach(inst => {
@@ -1538,68 +1485,47 @@
       });
   }
 
-  function startSolTracker() {
-    if (whaleSocketSol) return; // Prevent multiple connections
-
-    // 트랜잭션 처리 루프 시작 (최초 1회)
-    solanaTransactionProcessor();
-
-    const wssUrl = WSS_RPC_LIST.SOL[solWssRpcIndex];
-    whaleSocketSol = new WebSocket(wssUrl);
-
-    whaleSocketSol.onopen = () => {
-      console.log(`SOL WS connected to ${wssUrl}. Subscribing to logs...`);
-      console.log('SOL WS connected.');
-      // 'logsSubscribe'를 사용하여 SOL, USDC, USDT 전송 관련 로그를 실시간으로 받습니다.
-      whaleSocketSol.send(JSON.stringify({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "logsSubscribe",
-        "params": [
-          { "mentions": [
-              "11111111111111111111111111111111", // System Program (SOL)
-              "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-              "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"  // USDT
-            ] 
-          }, 
-          { "commitment": "confirmed" }
-        ]
-      }));
-    };
-
-    whaleSocketSol.onmessage = (msg) => {
+  async function scanLatestSolanaBlock() {
       try {
-          const data = JSON.parse(msg.data);
-          if (data.result && data.id === 1) {
-              console.log('SOL WS subscribed to logs.');
-              return;
+          const currentSlot = await fetchSolanaRpc({ jsonrpc: "2.0", id: 1, method: "getSlot" });
+          if (currentSlot <= lastProcessedSolSlot) {
+              return; // 이미 처리된 블록이므로 건너뜁니다.
           }
-          if (data.method === 'logsNotification' && data.params && data.params.result) {
-              const signature = data.params.result.value.signature;
-              // 대기열이 너무 길면 추가하지 않음 (메모리 보호)
-              if (solTxQueue.length < 100) {
-                  solTxQueue.push(signature);
-              } else {
-                  console.warn('SOL WS queue is full, dropping transaction.');
+  
+          const block = await fetchSolanaRpc({
+              jsonrpc: "2.0", id: 1, method: "getBlock",
+              params: [currentSlot, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, transactionDetails: "full" }]
+          });
+  
+          if (block && block.transactions) {
+              for (const tx of block.transactions) {
+                  const signature = tx.transaction.signatures[0];
+                  if (processedSolSignatures.has(signature)) continue;
+                  
+                  parseSolTransaction(tx);
+                  
+                  processedSolSignatures.add(signature);
+                  // 메모리 관리를 위해 오래된 서명 제거
+                  if (processedSolSignatures.size > 1000) {
+                      const oldest = processedSolSignatures.values().next().value;
+                      processedSolSignatures.delete(oldest);
+                  }
               }
           }
+          lastProcessedSolSlot = currentSlot;
+  
       } catch (e) {
-        console.error('Error parsing SOL WS message:', e);
+          console.error("솔라나 블록 스캔 실패:", e.message);
       }
-    };
+  }
 
-    whaleSocketSol.onclose = () => {
-      console.warn('SOL WS closed. Reconnecting...');
-      whaleSocketSol = null;
-      solWssRpcIndex = (solWssRpcIndex + 1) % WSS_RPC_LIST.SOL.length;
-      console.warn(`SOL WS closed. Switching to next WSS RPC: ${WSS_RPC_LIST.SOL[solWssRpcIndex]}`);
-      setTimeout(startSolTracker, 3000);
-    };
-
-    whaleSocketSol.onerror = (err) => {
-      console.error('SOL WS error:', err);
-      whaleSocketSol.close(); // 에러 발생 시 연결을 닫아 onclose 핸들러가 재연결을 시도하도록 합니다.
-    };
+  function startSolTracker() {
+      // 중복 실행 방지
+      if (startSolTracker.started) return;
+      startSolTracker.started = true;
+      
+      scanLatestSolanaBlock(); // 즉시 한 번 실행
+      setInterval(scanLatestSolanaBlock, 15000); // 15초마다 반복 실행
   }
 
   function addWhaleRow(symbol, amount, valueUsd, infoHtml) {
