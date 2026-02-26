@@ -869,7 +869,15 @@
         const msg = JSON.parse(e.data);
         if (msg.data && msg.data.s) {
             const symbol = msg.data.s.replace('USDT', '');
-            updateFunbiRowData(symbol, { binance: parseFloat(msg.data.r) });
+            const fundingRate = parseFloat(msg.data.r);
+            const nextTime = parseInt(msg.data.T, 10);
+
+            updateFunbiRowData(symbol, { binance: fundingRate });
+
+            // BTC 데이터로 대표 펀딩 시간을 업데이트합니다.
+            if (symbol === 'BTC' && nextTime && standardNextFundingTime !== nextTime) {
+                standardNextFundingTime = nextTime;
+            }
         }
     };
     ws.onclose = () => reconnect(name, () => connectBinanceFundingSocket(symbols));
@@ -1082,8 +1090,7 @@
       if (funbiTimer) clearInterval(funbiTimer);
 
       // 다음 펀딩 시간 설정 (바이낸스 시간을 기준으로 통일)
-      const binanceData = data.binanceFuturesMap && data.binanceFuturesMap['BTC'];
-      standardNextFundingTime = binanceData ? binanceData.nextFundingTime : null;
+      // standardNextFundingTime은 이제 바이낸스 웹소켓에서 직접 수신하여 설정합니다.
       hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
 
       // 가져온 데이터로 funbiRows를 업데이트합니다.
