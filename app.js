@@ -1084,10 +1084,13 @@
       // 웹소켓은 한 번만 연결합니다.
       if (!funbiSocketsConnected) {
         const symbols = funbiRows.map(r => r.name);
-        connectBinanceFundingSocket(symbols);
-        connectBybitFundingSocket(symbols);
-        connectOkxFundingSocket(symbols);
-        funbiSocketsConnected = true;
+        // 김프 데이터 로딩이 완료되어 심볼 목록이 있을 때만 소켓에 연결합니다.
+        if (symbols.length > 0) {
+            connectBinanceFundingSocket(symbols);
+            connectBybitFundingSocket(symbols);
+            connectOkxFundingSocket(symbols);
+            funbiSocketsConnected = true;
+        }
       }
     }).catch(e => {
       if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="loading">펀딩비 데이터 로딩 실패: ${e.message}</td></tr>`;
@@ -1798,6 +1801,11 @@
 
       // 0.5초마다 Bitget 현물/선물 가격을 폴링하여 업데이트합니다.
       setInterval(pollBitgetPrices, 500);
+
+      // 김프 데이터 로딩 후, 펀비 탭이 활성화 상태였다면 데이터를 다시 로드하여 race condition을 해결합니다.
+      if ($('#section-funbi').classList.contains('active')) {
+        loadFunbi();
+      }
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
