@@ -16,7 +16,7 @@
   const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 
   // 고래 추적 설정
-  const WHALE_THRESHOLD_USD = 1000000; // 100만 달러 이상 감지
+  const WHALE_THRESHOLD_USD = 1000; // 100만 달러 이상 감지
 
   /** 메인 코인 우선 순서 (업비트 KRW 상장 심볼 기준, 시총 상위 150개 근사치) */
   const MAIN_SYMBOLS = [
@@ -1233,26 +1233,6 @@
   let whalePage = 1;
   let whaleItemsPerPage = 10;
 
-  function updateStatus(chain, isConnected) {
-    const statusContainer = document.querySelector('.whale-status-bar');
-    if (!statusContainer) return;
-
-    // 전역 상태 객체 초기화
-    if (!window.whaleStatus) window.whaleStatus = { BTC: false, ETH: false, ARB: false, SOL: false };
-    
-    // 상태 업데이트
-    window.whaleStatus[chain.toUpperCase()] = isConnected;
-
-    // UI 렌더링
-    const statusHtml = ['BTC', 'ETH', 'ARB', 'SOL'].map(k => {
-      const color = window.whaleStatus[k] ? '#14f195' : '#f6465d';
-      // 텍스트를 제거하고, 마우스 오버 시 툴팁으로 체인 이름을 보여줍니다.
-      return `<span style="margin-right: 8px;" title="${k}"><span style="color:${color}; font-size: 1.5em; line-height: 1;">●</span></span>`;
-    }).join('');
-    
-    statusContainer.innerHTML = statusHtml;
-  }
-
   // RPC 목록 (장애 시 자동 전환)
   const RPC_LIST = {
     ETH: ['https://cloudflare-eth.com', 'https://rpc.flashbots.net', 'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'],
@@ -1271,11 +1251,11 @@
     
     whaleSocket.onopen = function() {
       whaleSocket.send(JSON.stringify({ "op": "unconfirmed_sub" }));
-      updateStatus('btc', true);
+      console.log('BTC WS connected.');
     };
 
     whaleSocket.onclose = function() {
-      updateStatus('btc', false);
+      console.warn('BTC WS closed. Reconnecting...');
       whaleSocket = null;
       setTimeout(startBtcTracker, 3000);
     };
@@ -1348,11 +1328,11 @@
     let ws = new WebSocket(rpcUrls[currentRpcIndex]);
 
     ws.onopen = () => {
-      updateStatus(chainSymbol.toLowerCase(), true);
+      console.log(`EVM WS for ${chainSymbol} connected.`);
       ws.send(JSON.stringify({"jsonrpc":"2.0","id": 1, "method": "eth_subscribe", "params": ["newHeads"]}));
     };
     ws.onclose = () => {
-      updateStatus(chainSymbol.toLowerCase(), false);
+      console.warn(`EVM WS for ${chainSymbol} closed.`);
       // Switch to next RPC on close
       const nextRpcIndex = (currentRpcIndex + 1) % rpcUrls.length;
       if (chainSymbol === 'ETH') ethRpcIndex = nextRpcIndex;
@@ -1443,7 +1423,6 @@
 
     isProcessingSolTx = true;
     const signature = solTxQueue.shift();
-    updateStatus('sol', true);
     
     await processSolTransaction(signature);
 
@@ -1485,8 +1464,7 @@
 
               } catch (e) {
                   lastError = e;
-                  if (e.message === "null result" && attempt < 3) {
-                      updateStatus('sol', true);
+                  if (e.message === "null result" && attempt < 3) {                      
                       await new Promise(r => setTimeout(r, 1000 * attempt)); // 1초, 2초 대기
                   } else {
                       // 다른 종류의 에러는 즉시 중단
@@ -1503,7 +1481,6 @@
           parseSolTransaction(txData);
 
       } catch (e) {
-          updateStatus('sol', true);
           solHttpRpcIndex = (solHttpRpcIndex + 1) % RPC_LIST.SOL.length;
           console.warn(`Solana getTransaction failed for sig ${signature}. Error: ${e.message}. Switching to RPC index ${solHttpRpcIndex}`);
       } finally {
@@ -1569,7 +1546,7 @@
 
     whaleSocketSol.onopen = () => {
       console.log(`SOL WS connected to ${wssUrl}. Subscribing to logs...`);
-      updateStatus('sol', true);
+      console.log('SOL WS connected.');
       // 'logsSubscribe'를 사용하여 SOL, USDC, USDT 전송 관련 로그를 실시간으로 받습니다.
       whaleSocketSol.send(JSON.stringify({
         "jsonrpc": "2.0",
@@ -1591,7 +1568,7 @@
       try {
           const data = JSON.parse(msg.data);
           if (data.result && data.id === 1) {
-              updateStatus('sol', true);
+              console.log('SOL WS subscribed to logs.');
               return;
           }
           if (data.method === 'logsNotification' && data.params && data.params.result) {
@@ -1609,7 +1586,7 @@
     };
 
     whaleSocketSol.onclose = () => {
-      updateStatus('sol', false);
+      console.warn('SOL WS closed. Reconnecting...');
       whaleSocketSol = null;
       solWssRpcIndex = (solWssRpcIndex + 1) % WSS_RPC_LIST.SOL.length;
       console.warn(`SOL WS closed. Switching to next WSS RPC: ${WSS_RPC_LIST.SOL[solWssRpcIndex]}`);
@@ -1617,7 +1594,7 @@
     };
 
     whaleSocketSol.onerror = (err) => {
-      updateStatus('sol', false);
+      console.error('SOL WS error:', err);
       whaleSocketSol.close(); // 에러 발생 시 연결을 닫아 onclose 핸들러가 재연결을 시도하도록 합니다.
     };
   }
