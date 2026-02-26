@@ -383,24 +383,6 @@
     } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
   }
 
-  // [추가] Bybit 선물 가격 주기적 폴링 함수 (WebSocket 불안정으로 인한 대체)
-  async function pollBybitFuturesPrices() {
-    try {
-      const res = await fetchJson(BYBIT_FUTURES_TICKER_URL);
-      if (res && res.result && res.result.list) {
-        res.result.list.forEach(t => {
-          if (t.symbol.endsWith('USDT')) {
-            const symbol = t.symbol.replace('USDT', '');
-            // 테이블에 존재하는 코인만 업데이트하여 불필요한 연산을 줄입니다.
-            if (allRows.some(row => row.name === symbol)) {
-              updateRowData(symbol, { bybit_perp: parseFloat(t.lastPrice) });
-            }
-          }
-        });
-      }
-    } catch (e) { /* 오류는 fetchJson 내부에서 로깅되므로 여기서는 무시 */ }
-  }
-
   // --- 실시간 데이터 처리 (웹소켓) ---
   function connectWebsockets(markets) {
     const symbols = markets.map(m => m.replace('KRW-', ''));
@@ -409,7 +391,7 @@
     connectBinanceSocket(symbols);
     connectBybitSocket(symbols);
     connectBinanceFuturesSocket(symbols);
-    // connectBybitFuturesSocket(symbols); // 바이비트 선물은 불안정한 웹소켓 대신 HTTP 폴링으로 대체
+    connectBybitFuturesSocket(symbols);
     connectOkxSocket(symbols);
     connectOkxFuturesSocket(symbols);
     connectGateioSocket(symbols);
@@ -540,6 +522,53 @@
       }
     };
     ws.onclose = () => reconnect(name, () => connectBinanceFuturesSocket(symbols));
+  }
+
+  function connectBybitFuturesSocket(symbols) {
+    const name = 'BybitFutures';
+    if (sockets[name]) {
+      sockets[name].onclose = null;
+      sockets[name].close();
+    }
+    const ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
+    sockets[name] = ws;
+    let pingInterval = null;
+    const cleanup = () => clearInterval(pingInterval);
+
+    ws.onopen = () => {
+      console.log(`${name} 웹소켓 연결 성공`);
+      const args = symbols.map(s => `tickers.${s}USDT`);
+
+      // 현물과 동일하게, 선물도 안정성을 위해 순차적으로 구독 요청합니다.
+      const chunkSize = 10;
+      for (let i = 0; i < args.length; i += chunkSize) {
+          const chunk = args.slice(i, i + chunkSize);
+          setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ op: 'subscribe', args: chunk }));
+              }
+          }, (i / chunkSize) * 100);
+      }
+
+      pingInterval = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('{"op":"ping"}'); }, 20000);
+    };
+    ws.onmessage = (e) => {
+      const t = JSON.parse(e.data);
+      // Bybit 웹소켓은 가격 변동이 없을 때 'lastPrice' 필드를 생략하고 보냅니다.
+      // 이 경우 parseFloat(undefined)가 NaN이 되므로, lastPrice 필드가 실제로 존재할 때만 업데이트합니다.
+      if (t.topic && t.topic.startsWith('tickers') && t.data && t.data.lastPrice) {
+        updateRowData(t.data.symbol.replace('USDT', ''), { bybit_perp: parseFloat(t.data.lastPrice) });
+      }
+    };
+    ws.onclose = () => {
+        console.log(`${name} 웹소켓 연결이 끊겼습니다. 3초 후 재연결합니다.`);
+        cleanup();
+        setTimeout(() => connectBybitFuturesSocket(symbols), 3000);
+    };
+    ws.onerror = (err) => {
+        console.error(`${name} 웹소켓 오류 발생:`, err);
+        ws.close();
+    };
   }
 
   function connectOkxSocket(symbols) {
@@ -1658,9 +1687,6 @@
 
       // 0.5초마다 Bitget 현물/선물 가격을 폴링하여 업데이트합니다.
       setInterval(pollBitgetPrices, 500);
-
-      // 1초마다 Bybit 선물 가격을 폴링하여 업데이트합니다. (웹소켓 불안정 대체)
-      setInterval(pollBybitFuturesPrices, 1000);
 
     } catch (err) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="17" class="loading" style="color: #f6465d;">데이터 로딩 실패: ${err.message}</td></tr>`;
