@@ -1055,45 +1055,18 @@
   function loadFunbi() {
     const tbody = $('#funbi-table-body');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="loading">펀딩비 데이터를 불러오는 중...</td></tr>';
+    
+    // 1. 김프 비교 목록(allRows)을 기준으로 즉시 테이블 구조를 만듭니다.
+    const targetList = allRows.length > 0 ? allRows : [];
+    funbiRows = targetList.map(row => ({
+        name: row.name,
+        binance: null, bybit: null, okx: null,
+        bitget: null, gate: null, hyperliquid: null
+    }));
+    applyFunbiSortAndFilter(); // 빈 테이블 구조를 먼저 렌더링합니다.
 
-    // 서버에서 Bitget, Gate, Hyperliquid 등 나머지 거래소 데이터를 가져옵니다.
-    fetch('/api/data').then(res => res.json()).then(data => {
-      if (funbiTimer) clearInterval(funbiTimer);
-
-      // 김프 비교 목록(allRows)과 동일한 코인을 기준으로 테이블을 구성합니다.
-      const targetList = allRows.length > 0 ? allRows : [];
-
-      // 다음 펀딩 시간 설정 (서버에서 가져온 데이터 중 하나를 기준으로)
-      const gateData = data.gateioFuturesMap && data.gateioFuturesMap['BTC'];
-      standardNextFundingTime = gateData ? gateData.nextFundingTime : null;
-      hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
-
-      funbiRows = targetList.map(row => {
-        const sym = row.name;
-        return {
-          name: sym,
-          // Binance, Bybit, OKX는 웹소켓으로 채울 것이므로 초기값은 null로 설정합니다.
-          binance: null,
-          bybit: null,
-          okx: null,
-          // 나머지 거래소는 서버 데이터 사용
-          bitget: data.bitgetFuturesMap[sym]?.funding ?? null,
-          gate: data.gateioFuturesMap[sym]?.funding ?? null,
-          hyperliquid: data.hyperliquidMap[sym]?.funding ?? null
-        };
-      });
-
-      applyFunbiSortAndFilter(); // 테이블 구조를 먼저 렌더링합니다.
-      updateFunbiTimers();
-
-      funbiTimer = setInterval(() => {
-        if ($('#section-funbi').classList.contains('active')) {
-          updateFunbiTimers();
-        }
-      }, 1000);
-
-      // 웹소켓은 한 번만 연결합니다.
-      if (!funbiSocketsConnected) {
+    // 2. 웹소켓을 즉시 연결하여 바이낸스, 바이빗, OKX 데이터를 실시간으로 받습니다.
+    if (!funbiSocketsConnected) {
         const symbols = funbiRows.map(r => r.name);
         // 김프 데이터 로딩이 완료되어 심볼 목록이 있을 때만 소켓에 연결합니다.
         if (symbols.length > 0) {
@@ -1102,9 +1075,45 @@
             connectOkxFundingSocket(symbols);
             funbiSocketsConnected = true;
         }
-      }
+    }
+
+    // 3. 백그라운드에서 나머지 거래소(Bitget, Gate, Hyperliquid) 데이터를 서버로부터 가져옵니다.
+    fetch('/api/data').then(res => res.json()).then(data => {
+      if (funbiTimer) clearInterval(funbiTimer);
+
+      // 다음 펀딩 시간 설정 (서버에서 가져온 데이터 중 하나를 기준으로)
+      const gateData = data.gateioFuturesMap && data.gateioFuturesMap['BTC'];
+      standardNextFundingTime = gateData ? gateData.nextFundingTime : null;
+      hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
+
+      // 가져온 데이터로 funbiRows를 업데이트합니다.
+      funbiRows.forEach(row => {
+          const sym = row.name;
+          row.bitget = data.bitgetFuturesMap[sym]?.funding ?? null;
+          row.gate = data.gateioFuturesMap[sym]?.funding ?? null;
+          row.hyperliquid = data.hyperliquidMap[sym]?.funding ?? null;
+      });
+      
+      applyFunbiSortAndFilter(); // 업데이트된 데이터로 테이블을 다시 렌더링하고 정렬을 적용합니다.
+      updateFunbiTimers();
+
+      funbiTimer = setInterval(() => {
+        if ($('#section-funbi').classList.contains('active')) {
+          updateFunbiTimers();
+        }
+      }, 1000);
     }).catch(e => {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="loading">펀딩비 데이터 로딩 실패: ${e.message}</td></tr>`;
+      // fetch가 실패해도 웹소켓 데이터는 계속 표시되도록, 전체 테이블을 덮어쓰지 않고 콘솔에만 오류를 기록합니다.
+      console.error("펀딩비 일부 데이터(Bitget, Gate, HL) 로딩 실패:", e.message);
+      // 타이머는 계속 돌도록 설정해줍니다.
+      if (funbiTimer) clearInterval(funbiTimer);
+      hyperliquidNextFundingTime = Math.ceil(Date.now() / 3600000) * 3600000;
+      updateFunbiTimers();
+       funbiTimer = setInterval(() => {
+        if ($('#section-funbi').classList.contains('active')) {
+          updateFunbiTimers();
+        }
+      }, 1000);
     });
   }
 
