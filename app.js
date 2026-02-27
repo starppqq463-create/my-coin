@@ -202,10 +202,12 @@
     return Number(n).toLocaleString('ko-KR', { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
   }
 
-  function formatPercent(n) {
+  function formatPercent(n, sign = false) {
     if (n == null || isNaN(n)) return '-';
-    const s = Number(n).toFixed(4);
-    return (Number(n) >= 0 ? '+' : '') + s + '%';
+    const percentage = n * 100;
+    const s = percentage.toFixed(2);
+    if (parseFloat(s) === 0) return '0.00%';
+    return (sign && percentage > 0 ? '+' : '') + s + '%';
   }
 
   // --- 데이터 요청 함수 (클라이언트 사이드) ---
@@ -855,7 +857,7 @@
         if (cell) {
             let content;
             if (exchange.startsWith('oi')) {
-                content = exchange === 'oi' ? fmtOi(value) : formatPercent(value);
+                content = exchange === 'oi' ? fmtOi(value) : formatPercent(value, true);
                 cell.className = `text-right ${value > 0 ? 'positive' : 'negative'}`;
             } else {
                 content = fmtRate(value);
@@ -1040,12 +1042,13 @@
         if (price == null) return '-';
         const priceKrw = price * krwPerUsd;
         let premiumHtml = '';
+        const volumeHtml = volume ? `<span class="sub-text">거래량: $${formatNumber(volume / 1_000_000, 1)}M</span>` : '';
         if (basePrice != null && basePrice > 0 && price > 0) {
           const premium = (basePrice / priceKrw) - 1;
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
-          premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
+          premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium, true)}</span>`;
         }
-        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
+        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}${volumeHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
@@ -1075,7 +1078,7 @@
           <td id="cell-gate_perp-${r.name}" class="text-right col-gate_perp">${fmtOverseas(r.gate_perp, r.gate_perpVol)}</td>
           <td id="cell-hyperliquid_spot-${r.name}" class="text-right col-hyperliquid_spot">${fmtOverseas(r.hyperliquid_spot, null)}</td>
           <td id="cell-hyperliquid_perp-${r.name}" class="text-right col-hyperliquid_perp">${fmtOverseas(r.hyperliquid_perp, null)}</td>
-          <td class="text-right ${changeClass}">${r.change != null ? formatPercent(r.change) : '-'}</td>
+          <td class="text-right ${changeClass}">${r.change != null ? formatPercent(r.change, true) : '-'}</td>
           <td class="text-right volume">${formatNumber((r.volume || 0) / 1e6, 0)}백만</td>
         </tr>
       `;
