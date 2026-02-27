@@ -212,22 +212,6 @@ async function getBinanceFuturesTickers() {
     console.error(`[API] All Binance futures domains failed.`);
     return {};
 }
-async function getBinanceFundingRates() {
-    for (const domain of BINANCE_FUTURES_DOMAINS) {
-        const list = await fetchJson(`https://${domain}/fapi/v1/premiumIndex`, {}, 0);
-        if (list && Array.isArray(list)) {
-            return list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = {
-                    funding: parseFloat(t.lastFundingRate),
-                    nextFundingTime: parseInt(t.nextFundingTime)
-                };
-                return acc;
-            }, {});
-        }
-    }
-    console.error(`[API] All Binance funding domains failed.`);
-    return {};
-}
 async function getBybitFuturesTickers() {
     for (const domain of BYBIT_DOMAINS) {
         const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
@@ -322,16 +306,17 @@ module.exports = async (req, res) => {
             getExchangeRate(),
             getUpbitTickers(upbitMarketBatch),
             getBithumbTickers(),
-            Promise.resolve(null), // Binance Spot (Client)
-            Promise.resolve(null), // Bybit Spot (Client)
+            getBinanceTickers(),
+            getBybitTickers(),
             getOkxTickers(),
             getBitgetTickers(),
             getGateioTickers(),
             getHyperliquidTickers(),
+            getBinanceFuturesTickers(),
+            getBybitFuturesTickers(),
             getOkxFuturesTickers(),
             getBitgetFuturesTickers(),
             getGateioFuturesTickers(),
-            getBinanceFundingRates(), // 펀딩비 추가
             getOkxFundingRates()      // 펀딩비 추가
         ]);
 
@@ -342,28 +327,22 @@ module.exports = async (req, res) => {
             rate: getValue(results[0], 1350),
             upbitTickers: getValue(results[1], []),
             bithumbMap: getValue(results[2], {}),
-            binanceMap: {},
-            bybitMap: {},
+            binanceMap: getValue(results[3], {}),
+            bybitMap: getValue(results[4], {}),
             okxMap: getValue(results[5], {}),
             bitgetMap: getValue(results[6], {}),
             gateMap: getValue(results[7], {}),
             hyperliquidMap: getValue(results[8], {}),
-            binanceFuturesMap: {},
-            bybitFuturesMap: {},
-            okxFuturesMap: getValue(results[9], {}),
-            bitgetFuturesMap: getValue(results[10], {}),
-            gateioFuturesMap: getValue(results[11], {})
+            binanceFuturesMap: getValue(results[9], {}),
+            bybitFuturesMap: getValue(results[10], {}),
+            okxFuturesMap: getValue(results[11], {}),
+            bitgetFuturesMap: getValue(results[12], {}),
+            gateioFuturesMap: getValue(results[13], {})
         };
 
         // 펀딩비 데이터 병합
-        const binanceFunding = getValue(results[12], {});
-        const okxFunding = getValue(results[13], {});
+        const okxFunding = getValue(results[14], {});
 
-        for (const symbol in binanceFunding) {
-            if (!allData.binanceFuturesMap[symbol]) allData.binanceFuturesMap[symbol] = {};
-            allData.binanceFuturesMap[symbol].funding = binanceFunding[symbol].funding;
-            allData.binanceFuturesMap[symbol].nextFundingTime = binanceFunding[symbol].nextFundingTime;
-        }
         for (const symbol in okxFunding) {
             if (allData.okxFuturesMap[symbol]) {
                 allData.okxFuturesMap[symbol].funding = okxFunding[symbol].funding;
