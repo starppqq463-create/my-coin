@@ -16,7 +16,7 @@
   const OKX_FUTURES_TICKER_URL = 'https://www.okx.com/api/v5/market/tickers?instType=SWAP';
 
   // 고래 추적 설정
-  const WHALE_THRESHOLD_USD = 1000; // 100만 달러 이상 감지
+  const WHALE_THRESHOLD_USD = 1000000; // 100만 달러 이상 감지
 
   /** 메인 코인 우선 순서 (업비트 KRW 상장 심볼 기준, 시총 상위 150개 근사치) */
   const MAIN_SYMBOLS = [
@@ -1980,4 +1980,5 @@
   } else {
     init();
   }
+
 })();
