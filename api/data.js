@@ -141,7 +141,7 @@ async function getBybitTickers() {
         const res = await fetchJson(`https://${domain}/v5/market/tickers?category=spot`, {}, 0);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = parseFloat(t.lastPrice);
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), turnover24h: parseFloat(t.turnover24h) };
                 return acc;
             }, {});
         }
@@ -217,7 +217,7 @@ async function getBybitFuturesTickers() {
         const res = await fetchJson(`https://${domain}/v5/market/tickers?category=linear`, {}, 0);
         if (res && res.result && res.result.list) {
             return res.result.list.filter(t => t.symbol.endsWith('USDT')).reduce((acc, t) => {
-                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime) };
+                acc[t.symbol.replace('USDT', '')] = { price: parseFloat(t.lastPrice), funding: parseFloat(t.fundingRate), nextFundingTime: parseInt(t.nextFundingTime), turnover24h: parseFloat(t.turnover24h) };
                 return acc;
             }, {});
         }

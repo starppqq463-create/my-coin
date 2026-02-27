@@ -1798,7 +1798,7 @@
             upbit: upbitData.trade_price,
             bithumb: data.bithumbMap[symbol] ?? null,
             binance: data.binanceMap[symbol]?.price ?? null,
-            bybit: data.bybitMap[symbol] ?? null,
+            bybit: data.bybitMap[symbol]?.price ?? null,
             okx: data.okxMap[symbol] ?? null,
             bitget: data.bitgetMap[symbol] ?? null,
             gate: data.gateMap[symbol] ?? null,
