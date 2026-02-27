@@ -1443,17 +1443,13 @@
       const solRow = allRows.find(r => r.name === 'SOL');
       const solPrice = solRow?.binance || 150;
   
-      // 방법 1: 네이티브 SOL 이체 감지 (pre/post 잔액 비교)
-      const preBalancesNative = txData.meta.preBalances;
-      const postBalancesNative = txData.meta.postBalances;
-  
-      postBalancesNative.forEach((postBalance, index) => {
-          const preBalance = preBalancesNative[index] || 0;
-          const diff = postBalance - preBalance;
-  
-          // SOL을 받은 계정만 확인 (수수료 지불자 등은 제외)
-          if (diff > 0) {
-              const amount = diff / 1e9;
+      // --- test.html의 '방법 3'에서 안정적으로 동작한 파싱 로직을 적용 ---
+
+      // 1. 네이티브 SOL 이체 검사 (단순 이체 instruction 파싱)
+      txData.transaction.message.instructions.forEach(inst => {
+          if (inst.program === 'system' && inst.parsed && inst.parsed.type === 'transfer') {
+              const lamports = inst.parsed.info.lamports;
+              const amount = lamports / 1e9;
               const valueUsd = amount * solPrice;
               if (valueUsd >= WHALE_THRESHOLD_USD) {
                   const hashShort = signature.substring(0, 8) + '...';
@@ -1464,14 +1460,14 @@
           }
       });
 
-      // 방법 2: SPL 토큰(USDC, USDT) 이체 감지 (pre/post 잔액 비교로 복잡한 트랜잭션도 감지)
-      // 이것이 test.html에서 사용된 핵심 로직입니다.
+      // 2. SPL 토큰(USDC, USDT) 이체 검사 (단순 방식)
+      // 참고: 이 방식은 복잡한 컨트랙트(예: Jupiter 스왑)를 통한 토큰 이동은 감지하지 못할 수 있습니다.
       const preBalances = new Map(
-          txData.meta.preTokenBalances.map(b => [b.accountIndex, b.uiTokenAmount?.uiAmount || 0])
+          txData.meta.preTokenBalances.map(b => [b.mint, b.uiTokenAmount?.uiAmount || 0])
       );
 
       txData.meta.postTokenBalances.forEach(post => {
-          const preAmount = preBalances.get(post.accountIndex) || 0;
+          const preAmount = preBalances.get(post.mint) || 0;
           const postAmount = post.uiTokenAmount?.uiAmount || 0;
           const diff = postAmount - preAmount;
 
@@ -1481,7 +1477,7 @@
               else if (post.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') symbol = 'USDT';
 
               if (symbol && diff >= WHALE_THRESHOLD_USD) {
-                  const valueUsd = diff; // 스테이블코인은 수량이 곧 가치
+                  const valueUsd = diff; // 스테이블코인은 수량이 곧 달러 가치
                   const hashShort = signature.substring(0, 8) + '...';
                   const explorerUrl = 'https://solscan.io/tx/' + signature;
                   const infoHtml = `<a href="${explorerUrl}" target="_blank" style="color:#848e9c; text-decoration:underline;">${hashShort}</a>`;
