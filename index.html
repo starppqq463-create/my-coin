@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>김치프리미엄 · 펀비 비교 | 국내·해외 거래소 가격 비교</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -18,7 +19,6 @@
       --border-color: #2b3139;
       --up-color: #c84a31; /* 업비트 상승색 */
       --down-color: #1261c4; /* 업비트 하락색 */
-      --accent-color: #f0b90b;
       --premium-high-bg: transparent;
     }
 
@@ -32,7 +32,6 @@
       --border-color: #e5e7eb;
       --up-color: #16a34a; /* Green for up */
       --down-color: #dc2626; /* Red for down */
-      --accent-color: #0056b3;
     }
     .light-theme .logo { color: #0f172a; }
     .light-theme .search-input { background: #f9fafb; color: #0f172a; border-color: #d1d5db; }
@@ -86,7 +85,7 @@
     .tabs { display: flex; gap: 10px; border-bottom: none; margin-bottom: 20px; }
     .tab {
       background: var(--bg-card);
-      border: 1px solid transparent;
+      border: 1px solid var(--border-color);
       color: var(--text-secondary);
       padding: 8px 18px;
       cursor: pointer;
@@ -96,8 +95,8 @@
       border-radius: 8px;
       transition: all 0.2s ease;
     }
-    .tab:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-color); }
-    .tab.active { color: var(--text-primary); font-weight: 700; background: var(--bg-hover); border-color: var(--accent-color); box-shadow: 0 0 8px rgba(240, 185, 11, 0.2); }
+    .tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .tab.active { color: var(--text-primary); font-weight: 700; background: var(--bg-hover); border-color: #f0b90b; box-shadow: 0 0 8px rgba(240, 185, 11, 0.2); }
 
     /* 섹션 전환 (필수) */
     .section { display: none; }
@@ -150,7 +149,6 @@
     /* 데이터 컬러링 */
     .text-right { text-align: right; }
     .sub-price { font-size: 12px; color: #5e6673; margin-left: 4px; }
-    .sub-text { font-size: 11px; color: var(--text-secondary); display: block; }
     .positive { color: var(--up-color); }
     .negative { color: var(--down-color); }
     .premium-high { color: var(--up-color); }
@@ -192,8 +190,6 @@
     .price-flash {
       animation: price-flash 0.7s ease-out;
     }
-    .light-theme #whale-table-body td { color: var(--text-primary); }
-    .light-theme #whale-table-body a { color: #0056b3; }
 
     /* 페이지네이션 */
     .pagination {
@@ -253,7 +249,6 @@
 
     /* 컬럼 숨기기 */
     .data-table.hide-upbit .col-upbit, .data-table.hide-bithumb .col-bithumb, .data-table.hide-binance .col-binance, .data-table.hide-binance_perp .col-binance_perp, .data-table.hide-bybit .col-bybit, .data-table.hide-bybit_perp .col-bybit_perp, .data-table.hide-okx .col-okx, .data-table.hide-okx_perp .col-okx_perp, .data-table.hide-bitget .col-bitget, .data-table.hide-bitget_perp .col-bitget_perp, .data-table.hide-gate .col-gate, .data-table.hide-gate_perp .col-gate_perp, .data-table.hide-hyperliquid_spot .col-hyperliquid_spot, .data-table.hide-hyperliquid_perp .col-hyperliquid_perp, .data-table.hide-hyperliquid .col-hyperliquid { display: none; }
-
   </style>
 </head>
 <body>

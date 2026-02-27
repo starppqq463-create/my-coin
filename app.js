@@ -200,12 +200,10 @@
     return Number(n).toLocaleString('ko-KR', { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
   }
 
-  function formatPercent(n, sign = false) {
+  function formatPercent(n) {
     if (n == null || isNaN(n)) return '-';
-    const percentage = n * 100;
-    const s = percentage.toFixed(2);
-    if (parseFloat(s) === 0) return '0.00%';
-    return (sign && percentage > 0 ? '+' : '') + s + '%';
+    const s = Number(n).toFixed(4);
+    return (Number(n) >= 0 ? '+' : '') + s + '%';
   }
 
   // --- 데이터 요청 함수 (클라이언트 사이드) ---
@@ -834,7 +832,7 @@
     const oldValues = {};
     for (const key in newData) {
         oldValues[key] = row[key];
-    } 
+    }
 
     Object.assign(row, newData);
 
@@ -845,21 +843,10 @@
         return `<span class="${colorClass}">${pct}</span>`;
     };
 
-    const fmtOi = (val) => {
-        if (val == null || isNaN(val)) return '-';
-        return `$${formatNumber(val / 1_000_000, 1)}M`;
-    };
-
     for (const [exchange, value] of Object.entries(newData)) {
         const cell = $(`#funbi-cell-${exchange}-${symbol}`);
         if (cell) {
-            let content;
-            if (exchange.startsWith('oi')) {
-                content = fmtRate(value);
-            } else {
-                content = fmtRate(value);
-            }
-            cell.innerHTML = content;
+            cell.innerHTML = fmtRate(value);
             
             const oldValue = oldValues[exchange];
             if (oldValue != null && value !== oldValue) {
@@ -921,10 +908,7 @@
     ws.onmessage = (e) => {
         const t = JSON.parse(e.data);
         if (t.topic && t.topic.startsWith('tickers') && t.data && typeof t.data.fundingRate !== 'undefined') {
-            const symbol = t.data.symbol.replace('USDT', '');
-            const fundingRate = parseFloat(t.data.fundingRate);
-
-            updateFunbiRowData(symbol, { bybit: fundingRate });
+            updateFunbiRowData(t.data.symbol.replace('USDT', ''), { bybit: parseFloat(t.data.fundingRate) });
         }
     };
     ws.onclose = () => { clearInterval(pingInterval); reconnect(name, () => connectBybitFundingSocket(symbols)); };
@@ -980,13 +964,11 @@
           const priceKrw = price * krwPerUsd;
           let premiumHtml = '';
           if (premiumBasePrice != null && premiumBasePrice > 0 && price > 0) {
-            const premium = (premiumBasePrice / priceKrw) - 1;
+            const premium = ((premiumBasePrice / priceKrw) - 1) * 100;
             const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
-            premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium, true)}</span>`;
+            premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
           }
-          const volume = row[`${exchange.split('_')[0]}Vol`];
-          const volumeHtml = volume ? `<span class="sub-text">거래량: $${formatNumber(volume / 1_000_000, 1)}M</span>` : '';
-          content = `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}${volumeHtml}`;
+          content = `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
         }
       }
       cell.innerHTML = content;
@@ -1029,25 +1011,25 @@
       const basePrice = r[premiumBase];
       const changeClass = r.change != null ? (r.change >= 0 ? 'positive' : 'negative') : '';
       const fmtKrw = v => v != null ? `<span class="price-main">${formatNumber(v, 0)}</span>` : '-';
-
-      const fmtOverseas = (price, volume) => {
+      
+      const fmtOverseas = (price) => {
         if (price == null) return '-';
         const priceKrw = price * krwPerUsd;
         let premiumHtml = '';
-        const volumeHtml = volume ? `<span class="sub-text">거래량: $${formatNumber(volume / 1_000_000, 1)}M</span>` : '';
         if (basePrice != null && basePrice > 0 && price > 0) {
-          const premium = (basePrice / priceKrw) - 1;
+          const premium = ((basePrice / priceKrw) - 1) * 100;
           const premiumClass = premium > 0 ? 'premium-high' : 'premium-low';
-          premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium, true)}</span>`;
+          premiumHtml = `<span class="premium-val ${premiumClass}">${formatPercent(premium)}</span>`;
         }
-        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}${volumeHtml}`;
+        return `<span class="price-main">${formatNumber(priceKrw, 0)}</span><span class="sub-price">$${formatNumber(price, 4)}</span>${premiumHtml}`;
       };
 
       const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
       const imgUrl = getCoinIconUrl(r.name);
 
-      const premiums = Object.keys(r).filter(k => k !== 'upbit' && k !== 'bithumb' && r[k] != null && basePrice != null && basePrice > 0 && r[k] > 0).map(k => (basePrice / (r[k] * krwPerUsd)) - 1);
-      const maxPremium = premiums.length > 0 ? Math.max(...premiums) * 100 : 0;
+      const premiums = [r.binance, r.binance_perp, r.bybit, r.bybit_perp, r.okx, r.okx_perp, r.bitget, r.bitget_perp, r.gate, r.gate_perp, r.hyperliquid_spot, r.hyperliquid_perp]
+        .filter(p => p != null && basePrice != null && basePrice > 0 && p > 0).map(p => ((basePrice / (p * krwPerUsd)) - 1) * 100);
+      const maxPremium = premiums.length > 0 ? Math.max(...premiums) : 0;
       const rowClass = maxPremium >= 5 ? 'premium-alert' : '';
 
       return `
@@ -1058,19 +1040,19 @@
           </td>
           <td id="cell-upbit-${r.name}" class="text-right col-upbit">${fmtKrw(r.upbit)}</td>
           <td id="cell-bithumb-${r.name}" class="text-right col-bithumb">${fmtKrw(r.bithumb)}</td>
-          <td id="cell-binance-${r.name}" class="text-right col-binance">${fmtOverseas(r.binance, r.binanceVol)}</td>
-          <td id="cell-binance_perp-${r.name}" class="text-right col-binance_perp">${fmtOverseas(r.binance_perp, r.binance_perpVol)}</td>
-          <td id="cell-bybit-${r.name}" class="text-right col-bybit">${fmtOverseas(r.bybit, r.bybitVol)}</td>
-          <td id="cell-bybit_perp-${r.name}" class="text-right col-bybit_perp">${fmtOverseas(r.bybit_perp, r.bybit_perpVol)}</td>
-          <td id="cell-okx-${r.name}" class="text-right col-okx">${fmtOverseas(r.okx, r.okxVol)}</td>
-          <td id="cell-okx_perp-${r.name}" class="text-right col-okx_perp">${fmtOverseas(r.okx_perp, r.okx_perpVol)}</td>
-          <td id="cell-bitget-${r.name}" class="text-right col-bitget">${fmtOverseas(r.bitget, r.bitgetVol)}</td>
-          <td id="cell-bitget_perp-${r.name}" class="text-right col-bitget_perp">${fmtOverseas(r.bitget_perp, r.bitget_perpVol)}</td>
-          <td id="cell-gate-${r.name}" class="text-right col-gate">${fmtOverseas(r.gate, r.gateVol)}</td>
-          <td id="cell-gate_perp-${r.name}" class="text-right col-gate_perp">${fmtOverseas(r.gate_perp, r.gate_perpVol)}</td>
-          <td id="cell-hyperliquid_spot-${r.name}" class="text-right col-hyperliquid_spot">${fmtOverseas(r.hyperliquid_spot, null)}</td>
-          <td id="cell-hyperliquid_perp-${r.name}" class="text-right col-hyperliquid_perp">${fmtOverseas(r.hyperliquid_perp, null)}</td>
-          <td class="text-right ${changeClass}">${r.change != null ? formatPercent(r.change, true) : '-'}</td>
+          <td id="cell-binance-${r.name}" class="text-right col-binance">${fmtOverseas(r.binance)}</td>
+          <td id="cell-binance_perp-${r.name}" class="text-right col-binance_perp">${fmtOverseas(r.binance_perp)}</td>
+          <td id="cell-bybit-${r.name}" class="text-right col-bybit">${fmtOverseas(r.bybit)}</td>
+          <td id="cell-bybit_perp-${r.name}" class="text-right col-bybit_perp">${fmtOverseas(r.bybit_perp)}</td>
+          <td id="cell-okx-${r.name}" class="text-right col-okx">${fmtOverseas(r.okx)}</td>
+          <td id="cell-okx_perp-${r.name}" class="text-right col-okx_perp">${fmtOverseas(r.okx_perp)}</td>
+          <td id="cell-bitget-${r.name}" class="text-right col-bitget">${fmtOverseas(r.bitget)}</td>
+          <td id="cell-bitget_perp-${r.name}" class="text-right col-bitget_perp">${fmtOverseas(r.bitget_perp)}</td>
+          <td id="cell-gate-${r.name}" class="text-right col-gate">${fmtOverseas(r.gate)}</td>
+          <td id="cell-gate_perp-${r.name}" class="text-right col-gate_perp">${fmtOverseas(r.gate_perp)}</td>
+          <td id="cell-hyperliquid_spot-${r.name}" class="text-right col-hyperliquid_spot">${fmtOverseas(r.hyperliquid_spot)}</td>
+          <td id="cell-hyperliquid_perp-${r.name}" class="text-right col-hyperliquid_perp">${fmtOverseas(r.hyperliquid_perp)}</td>
+          <td class="text-right ${changeClass}">${r.change != null ? formatPercent(r.change) : '-'}</td>
           <td class="text-right volume">${formatNumber((r.volume || 0) / 1e6, 0)}백만</td>
         </tr>
       `;
@@ -1160,8 +1142,12 @@
 
     // 헤더에 시간 표시 (Binance 시간 통일)
     const timeMap = {
-        'binance': stdStr, 'bybit': stdStr, 'okx': stdStr,
-        'bitget': stdStr, 'gate': stdStr, 'hyperliquid': hlStr
+        'binance': stdStr,
+        'bybit': stdStr,
+        'okx': stdStr,
+        'bitget': stdStr,
+        'gate': stdStr,
+        'hyperliquid': hlStr
     };
 
     for (const [key, str] of Object.entries(timeMap)) {
@@ -1181,7 +1167,7 @@
   function renderFunbiTable(rows) {
     const tbody = $('#funbi-table-body');
     if (!tbody) return;
-    if (!rows || !rows.length) {
+    if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 20px; color: #848e9c;">데이터가 없습니다.</td></tr>';
       return;
     }
@@ -1192,12 +1178,6 @@
         const colorClass = val > 0 ? 'positive' : (val < 0 ? 'negative' : '');
         return `<span class="${colorClass}">${pct}</span>`;
     };
-
-    const fmtOi = (val) => {
-        if (val == null || isNaN(val)) return '-';
-        return `$${formatNumber(val / 1_000_000, 1)}M`;
-    };
-
 
     tbody.innerHTML = rows.map(r => {
         const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
@@ -1231,8 +1211,8 @@
             va = a.name;
             vb = b.name;
         } else {
-            va = a[funbiSortKey] ?? null;
-            vb = b[funbiSortKey] ?? null;
+            va = a[funbiSortKey] ? a[funbiSortKey].rate : null;
+            vb = b[funbiSortKey] ? b[funbiSortKey].rate : null;
         }
         
         if (va == null) va = funbiSortKey === 'name' ? '' : -Infinity;
@@ -1557,14 +1537,13 @@
     const time = new Date().toLocaleTimeString('ko-KR');
     
     const colorMap = {
-      BTC: '#F7931A',
+      BTC: '#f0b90b',
       ETH: '#627eea',
       ARB: '#28a0f0',
       SOL: '#14f195',
-      XRP: '#00A3FF',
-      DOGE: '#BA9F33',
-      USDC: '#3375C9',
-      USDT: '#26A17B'
+      XRP: '#6fa8dc',
+      DOGE: '#c2a633',
+      USDC: '#2775ca'
     };
     const color = colorMap[symbol] || '#eaecef';
 
@@ -1622,7 +1601,7 @@
           <td>${r.time}</td>
           <td><span style="font-weight:700; color:${r.color};">${r.symbol}</span></td>
           <td class="text-right">${formatNumber(r.amount, 2)}</td>
-          <td class="text-right">${formatNumber(valueKrw / 100000000, 1)}억원</td>
+          <td class="text-right" style="color:#eaecef;">${formatNumber(valueKrw / 100000000, 1)}억원</td>
           <td class="text-right">${r.infoHtml}</td>
         </tr>
       `;
@@ -1665,7 +1644,7 @@
     // 펀비 테이블 정렬
     const funbiThead = $('.funbi-table thead');
     if (funbiThead) {
-        funbiThead.addEventListener('click', e => {
+        funbiThead.addEventListener('click', (e) => {
             const th = e.target.closest('th[data-sort]');
             if (!th) return;
             const key = th.dataset.sort;
@@ -1716,22 +1695,18 @@
         if (hasOverseasPrice && upbitData) {
           matchedRows.push({
             name: symbol,
-            change: upbitData.signed_change_rate,
+            change: upbitData.signed_change_rate != null ? upbitData.signed_change_rate * 100 : null,
             volume: upbitData.acc_trade_price_24h,
             upbit: upbitData.trade_price,
             bithumb: data.bithumbMap[symbol] ?? null,
             binance: data.binanceMap[symbol]?.price ?? null,
-            bybit: data.bybitMap[symbol]?.price ?? null,
+            bybit: data.bybitMap[symbol] ?? null,
             okx: data.okxMap[symbol] ?? null,
             bitget: data.bitgetMap[symbol] ?? null,
             gate: data.gateMap[symbol] ?? null,
-            binanceVol: data.binanceMap[symbol]?.volume ?? null,
-            bybitVol: data.bybitMap[symbol]?.turnover24h ?? null, // bybit은 turnover24h
             hyperliquid_spot: data.hyperliquidMap[symbol]?.spot ?? null,
             binance_perp: data.binanceFuturesMap[symbol]?.price ?? null,
-            binance_perpVol: data.binanceFuturesMap[symbol]?.volume ?? null,
             bybit_perp: data.bybitFuturesMap[symbol]?.price ?? null,
-            bybit_perpVol: data.bybitFuturesMap[symbol]?.turnover24h ?? null,
             okx_perp: data.okxFuturesMap[symbol]?.price ?? null,
             bitget_perp: data.bitgetFuturesMap[symbol]?.price ?? null,
             gate_perp: data.gateioFuturesMap[symbol]?.price ?? null,
@@ -1756,7 +1731,6 @@
       // 김프 데이터 로딩 후, 펀비 탭이 활성화 상태였다면 데이터를 다시 로드하여 race condition을 해결합니다.
       if ($('#section-funbi').classList.contains('active')) {
         loadFunbi();
-      }
       }
 
     } catch (err) {
@@ -1840,7 +1814,7 @@
         const section = document.getElementById('section-' + id);
         if (section) section.classList.add('active');
 
-        if (id === 'whale') { // 고래 추적 탭
+        if (id === 'whale') {
             initWhaleTracker();
         } else if (id === 'funbi') {
             loadFunbi();
