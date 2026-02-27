@@ -1213,6 +1213,9 @@
 
 
     tbody.innerHTML = rows.map(r => {
+        const oiDenominator = r.oi - r.oiChange;
+        const oiChangeRatio = (r.oi && r.oiChange != null && oiDenominator !== 0) ? (r.oiChange / oiDenominator) : null;
+
         const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
         const imgUrl = getCoinIconUrl(r.name);
         return `
@@ -1228,7 +1231,7 @@
                 <td id="funbi-cell-gate-${r.name}" class="text-right">${fmtRate(r.gate)}</td>
                 <td id="funbi-cell-hyperliquid-${r.name}" class="text-right">${fmtRate(r.hyperliquid)}</td>
                 <td id="funbi-cell-oi-${r.name}" class="text-right">${fmtOi(r.oi)}</td>
-                <td id="funbi-cell-oiChange-${r.name}" class="text-right ${r.oiChange > 0 ? 'positive' : 'negative'}">${formatPercent(r.oiChange, true)}</td>
+                <td id="funbi-cell-oiChange-${r.name}" class="text-right ${oiChangeRatio > 0 ? 'positive' : 'negative'}">${formatPercent(oiChangeRatio, true)}</td>
             </tr>
         `;
     }).join('');
@@ -1837,11 +1840,6 @@
       if ($('#section-funbi').classList.contains('active')) {
         loadFunbi();
       }
-
-      // 스크리너 렌더링
-      renderScreener();
-      if (screenerInterval) clearInterval(screenerInterval);
-      screenerInterval = setInterval(renderScreener, 30000); // 30초마다 스크리너 업데이트
       }
 
     } catch (err) {
@@ -1933,12 +1931,13 @@
                 showChart('BTC');
             }
             // 스크리너 데이터가 없다면 렌더링
-            if (!$('#screener-risers').innerHTML) {
-                renderScreener();
-            }
+            renderScreener();
+
             // 스크리너 업데이트 인터벌 설정
             if (screenerInterval) clearInterval(screenerInterval);
-            screenerInterval = setInterval(renderScreener, 30000);
+            screenerInterval = setInterval(() => {
+                if (document.getElementById('section-analysis').classList.contains('active')) renderScreener();
+            }, 30000);
         } else if (id === 'kimchi') { // 김프 탭으로 돌아오면 차트 숨기기
             const chartContainer = $('#chart-container');
             if (chartContainer) chartContainer.style.display = 'none';
