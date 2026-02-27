@@ -186,8 +186,6 @@
   let funbiSortKey = 'name';
   let funbiSortAsc = true;
   let funbiTimer = null;
-  let historicalChart = null;
-  let screenerInterval = null;
   let funbiSocketsConnected = false;
   let standardNextFundingTime = null;
   let hyperliquidNextFundingTime = null;
@@ -857,8 +855,7 @@
         if (cell) {
             let content;
             if (exchange.startsWith('oi')) {
-                content = exchange === 'oi' ? fmtOi(value) : formatPercent(value, true);
-                cell.className = `text-right ${value > 0 ? 'positive' : 'negative'}`;
+                content = fmtRate(value);
             } else {
                 content = fmtRate(value);
             }
@@ -888,10 +885,7 @@
             const fundingRate = parseFloat(msg.data.r);
             const nextTime = parseInt(msg.data.T, 10);
 
-            // 바이낸스 OI는 (계약 수 * 현재가)로 계산
-            const openInterest = parseFloat(msg.data.I) * parseFloat(msg.data.p);
-
-            updateFunbiRowData(symbol, { binance: fundingRate, oi: openInterest });
+            updateFunbiRowData(symbol, { binance: fundingRate });
 
             // BTC 데이터로 대표 펀딩 시간을 업데이트합니다.
             if (symbol === 'BTC' && nextTime && standardNextFundingTime !== nextTime) {
@@ -929,10 +923,8 @@
         if (t.topic && t.topic.startsWith('tickers') && t.data && typeof t.data.fundingRate !== 'undefined') {
             const symbol = t.data.symbol.replace('USDT', '');
             const fundingRate = parseFloat(t.data.fundingRate);
-            // Bybit는 24시간 OI 변화율을 직접 제공
-            const oiChange = parseFloat(t.data.openInterestValue); 
 
-            updateFunbiRowData(symbol, { bybit: fundingRate, oiChange: oiChange });
+            updateFunbiRowData(symbol, { bybit: fundingRate });
         }
     };
     ws.onclose = () => { clearInterval(pingInterval); reconnect(name, () => connectBybitFundingSocket(symbols)); };
@@ -1059,7 +1051,7 @@
       const rowClass = maxPremium >= 5 ? 'premium-alert' : '';
 
       return `
-        <tr class="${rowClass} clickable-row" data-coin="${r.name}">
+        <tr class="${rowClass}">
           <td class="name">
             <img class="coin-icon" src="${imgUrl}" alt="" referrerpolicy="no-referrer" onerror="this.src='${COIN_IMG_FALLBACK}'">
             <div><span class="coin-name">${r.name}</span><span class="coin-korean-name">${displayName}</span></div>
@@ -1083,11 +1075,6 @@
         </tr>
       `;
     }).join('');
-
-    // 차트 클릭 이벤트 바인딩
-    $$('#table-body .clickable-row').forEach(row => {
-        row.addEventListener('click', () => showChart(row.dataset.coin));
-    });
   }
 
   // --- 펀비 비교 기능 ---
@@ -1100,7 +1087,7 @@
     funbiRows = targetList.map(row => ({
         name: row.name,
         binance: null, bybit: null, okx: null,
-        bitget: null, gate: null, hyperliquid: null, oi: null, oiChange: null
+        bitget: null, gate: null, hyperliquid: null
     }));
     applyFunbiSortAndFilter(); // 빈 테이블 구조를 먼저 렌더링합니다.
 
@@ -1213,9 +1200,6 @@
 
 
     tbody.innerHTML = rows.map(r => {
-        const oiDenominator = r.oi - r.oiChange;
-        const oiChangeRatio = (r.oi && r.oiChange != null && oiDenominator !== 0) ? (r.oiChange / oiDenominator) : null;
-
         const displayName = COIN_NAMES[r.name] ? COIN_NAMES[r.name] : r.name;
         const imgUrl = getCoinIconUrl(r.name);
         return `
@@ -1230,8 +1214,6 @@
                 <td id="funbi-cell-bitget-${r.name}" class="text-right">${fmtRate(r.bitget)}</td>
                 <td id="funbi-cell-gate-${r.name}" class="text-right">${fmtRate(r.gate)}</td>
                 <td id="funbi-cell-hyperliquid-${r.name}" class="text-right">${fmtRate(r.hyperliquid)}</td>
-                <td id="funbi-cell-oi-${r.name}" class="text-right">${fmtOi(r.oi)}</td>
-                <td id="funbi-cell-oiChange-${r.name}" class="text-right ${oiChangeRatio > 0 ? 'positive' : 'negative'}">${formatPercent(oiChangeRatio, true)}</td>
             </tr>
         `;
     }).join('');
@@ -1245,7 +1227,7 @@
     
     list.sort((a, b) => {
         let va, vb;
-        if (['name', 'oi', 'oiChange'].includes(funbiSortKey)) {
+        if (funbiSortKey === 'name') {
             va = a.name;
             vb = b.name;
         } else {
@@ -1694,71 +1676,6 @@
     }
   }
 
-  // --- 신규 기능: 스크리너, 차트 ---
-  function renderScreener() {
-    if (!allRows || allRows.length === 0) return;
-
-    // 24시간 변동률(Upbit 기준)으로 정렬
-    const screenerData = [...allRows]
-        .filter(c => c.change != null)
-        .sort((a, b) => b.change - a.change);
-
-    const risersHtml = screenerData.slice(0, 5).map(c => `
-        <li>
-            <span>
-                <img src="${getCoinIconUrl(c.name)}" class="coin-icon" alt="">
-                <span class="coin-name">${c.name}</span>
-            </span>
-            <span class="positive">${formatPercent(c.change, true)}</span>
-        </li>
-    `).join('');
-
-    const fallersHtml = screenerData.slice(-5).reverse().map(c => `
-        <li>
-            <span>
-                <img src="${getCoinIconUrl(c.name)}" class="coin-icon" alt="">
-                <span class="coin-name">${c.name}</span>
-            </span>
-            <span class="negative">${formatPercent(c.change, true)}</span>
-        </li>
-    `).join('');
-
-    const screenerRisersEl = $('#screener-risers');
-    const screenerFallersEl = $('#screener-fallers');
-    if (screenerRisersEl) screenerRisersEl.innerHTML = risersHtml;
-    if (screenerFallersEl) screenerFallersEl.innerHTML = fallersHtml;
-  }
-
-  function generateDummyChartData(range) {
-      const counts = { '1h': 60, '24h': 24, '7d': 7 };
-      const labels = Array.from({ length: counts[range] }, (_, i) => i);
-      const data = Array.from({ length: counts[range] }, () => (Math.random() * 4) + 1); // 1% ~ 5%
-      return { labels, data };
-  }
-
-  function showChart(coin) {
-      $('#chart-container').style.display = 'block';
-      $('#chart-title').textContent = `${coin} 김치 프리미엄 추이 (시뮬레이션)`;
-
-      const { labels, data } = generateDummyChartData('1h');
-
-      if (historicalChart) historicalChart.destroy();
-      historicalChart = new Chart($('#historical-chart'), {
-          type: 'line',
-          data: {
-              labels: labels,
-              datasets: [{
-                  label: '김프 (%)', data: data, borderColor: 'rgba(240, 185, 11, 0.8)',
-                  backgroundColor: 'rgba(240, 185, 11, 0.1)', fill: true, tension: 0.3, pointRadius: 0,
-              }]
-          },
-          options: { responsive: true, scales: { y: { ticks: { callback: value => `${value.toFixed(2)}%` } } } }
-      });
-
-      $$('.chart-buttons button').forEach(btn => btn.classList.remove('active'));
-      $('.chart-buttons button[data-range="1h"]').classList.add('active');
-  }
-
   function setMeta(rate, time) {
     const rateEl = $('#exchange-rate');
     const updateEl = $('#last-update');
@@ -1925,22 +1842,6 @@
 
         if (id === 'whale') { // 고래 추적 탭
             initWhaleTracker();
-        } else if (id === 'analysis') { // 시장 분석 탭
-            // 차트가 표시되지 않았다면, 기본으로 BTC 차트를 보여줍니다.
-            if (!$('#chart-container').style.display || $('#chart-container').style.display === 'none') {
-                showChart('BTC');
-            }
-            // 스크리너 데이터가 없다면 렌더링
-            renderScreener();
-
-            // 스크리너 업데이트 인터벌 설정
-            if (screenerInterval) clearInterval(screenerInterval);
-            screenerInterval = setInterval(() => {
-                if (document.getElementById('section-analysis').classList.contains('active')) renderScreener();
-            }, 30000);
-        } else if (id === 'kimchi') { // 김프 탭으로 돌아오면 차트 숨기기
-            const chartContainer = $('#chart-container');
-            if (chartContainer) chartContainer.style.display = 'none';
         } else if (id === 'funbi') {
             loadFunbi();
         }
@@ -2092,21 +1993,6 @@
       const filtered = whaleData.filter(r => filterVal === 'ALL' || r.symbol === filterVal);
       const totalPages = Math.ceil(filtered.length / whaleItemsPerPage) || 1;
       if (whalePage < totalPages) { whalePage++; renderWhaleTable(); }
-    });
-
-    // 차트 버튼 이벤트 리스너
-    $$('.chart-buttons button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (!historicalChart) return;
-            const range = btn.dataset.range;
-            const { labels, data } = generateDummyChartData(range);
-            historicalChart.data.labels = labels;
-            historicalChart.data.datasets[0].data = data;
-            historicalChart.update();
-
-            $$('.chart-buttons button').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        });
     });
 
     setupSort();

@@ -4,10 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>김치프리미엄 · 펀비 비교 | 국내·해외 거래소 가격 비교</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -197,10 +195,6 @@
     .light-theme #whale-table-body td { color: var(--text-primary); }
     .light-theme #whale-table-body a { color: #0056b3; }
 
-    /* 김프 테이블 행 클릭 가능 표시 */
-    .clickable-row { cursor: pointer; }
-    .clickable-row:hover { background-color: var(--bg-hover); }
-
     /* 페이지네이션 */
     .pagination {
       display: flex;
@@ -260,16 +254,6 @@
     /* 컬럼 숨기기 */
     .data-table.hide-upbit .col-upbit, .data-table.hide-bithumb .col-bithumb, .data-table.hide-binance .col-binance, .data-table.hide-binance_perp .col-binance_perp, .data-table.hide-bybit .col-bybit, .data-table.hide-bybit_perp .col-bybit_perp, .data-table.hide-okx .col-okx, .data-table.hide-okx_perp .col-okx_perp, .data-table.hide-bitget .col-bitget, .data-table.hide-bitget_perp .col-bitget_perp, .data-table.hide-gate .col-gate, .data-table.hide-gate_perp .col-gate_perp, .data-table.hide-hyperliquid_spot .col-hyperliquid_spot, .data-table.hide-hyperliquid_perp .col-hyperliquid_perp, .data-table.hide-hyperliquid .col-hyperliquid { display: none; }
 
-    /* 신규 기능 UI */
-    .feature-box { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-    .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(45%, 1fr)); gap: 20px 40px; }
-    .screener-list { list-style: none; padding: 0; }
-    .screener-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
-    .screener-list li:last-child { border-bottom: none; }
-    #chart-container { display: none; margin-top: 20px; }
-    .chart-buttons button { background: var(--bg-hover); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 10px; border-radius: 4px; cursor: pointer; }
-    .chart-buttons button.active { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
-
   </style>
 </head>
 <body>
@@ -283,7 +267,6 @@
     <div class="container">
       <button type="button" class="tab active" data-tab="kimchi">김치 프리미엄</button>
       <button type="button" class="tab" data-tab="funbi">펀비 비교</button>
-      <button type="button" class="tab" data-tab="analysis">시장 분석</button>
       <button type="button" class="tab" data-tab="whale">고래 추적</button>
     </div>
   </nav>
@@ -393,35 +376,6 @@
         </div>
       </section>
 
-      <!-- 시장 분석 섹션 -->
-      <section id="section-analysis" class="section">
-        <!-- 아이디어 4: 김프 급등/급락 코인 스크리너 -->
-        <div class="feature-box">
-            <h2>김프 변동 스크리너 (24시간)</h2>
-            <p>24시간 동안 김치 프리미엄이 가장 많이 변동한 코인을 보여줍니다.</p>
-            <div class="grid-container">
-                <div>
-                    <h3>🚀 김프 급등 TOP 5</h3>
-                    <ul id="screener-risers" class="screener-list"></ul>
-                </div>
-                <div>
-                    <h3>🧊 김프 급락 TOP 5</h3>
-                    <ul id="screener-fallers" class="screener-list"></ul>
-                </div>
-            </div>
-        </div>
-        <!-- 아이디어 1: 과거 데이터 차트 -->
-        <div id="chart-container" class="feature-box">
-            <h3 id="chart-title">과거 데이터 차트</h3>
-            <div class="chart-buttons" style="margin-bottom: 10px;">
-                <button class="active" data-range="1h">1시간</button>
-                <button data-range="24h">24시간</button>
-                <button data-range="7d">7일</button>
-            </div>
-            <canvas id="historical-chart"></canvas>
-        </div>
-      </section>
-
       <!-- 펀비 비교 섹션 (확장용) -->
       <section id="section-funbi" class="section">
         <div class="section-header">
@@ -447,8 +401,6 @@
                 <th data-sort="bitget" class="text-right"><img src="https://www.google.com/s2/favicons?domain=bitget.com&sz=32" class="exchange-icon">Bitget</th>
                 <th data-sort="gate" class="text-right"><img src="https://www.google.com/s2/favicons?domain=gate.io&sz=32" class="exchange-icon">Gate.io</th>
                 <th data-sort="hyperliquid" class="text-right"><img src="https://www.google.com/s2/favicons?domain=hyperliquid.xyz&sz=32" class="exchange-icon">Hyperliquid</th>
-                <th data-sort="oi" class="text-right">미체결 약정</th>
-                <th data-sort="oiChange" class="text-right">OI 변화(24h)</th>
               </tr>
             </thead>
             <tbody id="funbi-table-body">
