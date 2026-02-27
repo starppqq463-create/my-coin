@@ -1443,11 +1443,17 @@
       const solRow = allRows.find(r => r.name === 'SOL');
       const solPrice = solRow?.binance || 150;
   
-      // 방법 1: 네이티브 SOL 이체 감지 (가장 간단하고 확실)
-      txData.transaction.message.instructions.forEach(inst => {
-          if (inst.program === 'system' && inst.parsed && inst.parsed.type === 'transfer') {
-              const lamports = inst.parsed.info.lamports;
-              const amount = lamports / 1e9;
+      // 방법 1: 네이티브 SOL 이체 감지 (pre/post 잔액 비교)
+      const preBalancesNative = txData.meta.preBalances;
+      const postBalancesNative = txData.meta.postBalances;
+  
+      postBalancesNative.forEach((postBalance, index) => {
+          const preBalance = preBalancesNative[index] || 0;
+          const diff = postBalance - preBalance;
+  
+          // SOL을 받은 계정만 확인 (수수료 지불자 등은 제외)
+          if (diff > 0) {
+              const amount = diff / 1e9;
               const valueUsd = amount * solPrice;
               if (valueUsd >= WHALE_THRESHOLD_USD) {
                   const hashShort = signature.substring(0, 8) + '...';
