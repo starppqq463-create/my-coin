@@ -1413,24 +1413,27 @@
   const processedSolSignatures = new Set(); // 중복 처리 방지
 
   async function fetchSolanaRpc(body) {
-      const rpcUrl = RPC_LIST.SOL[solHttpRpcIndex];
+      // 서버에 배포된 환경에서는 브라우저의 CORS 정책으로 인해 외부 RPC 직접 호출이 차단됩니다.
+      // 이를 해결하기 위해 우리 서버에 만든 API 프록시(/api/solana)를 통해 요청을 중계합니다.
+      const proxyUrl = '/api/solana';
       try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          const response = await fetch(rpcUrl, {
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 프록시를 경유하므로 타임아웃을 10초로 늘립니다.
+          const response = await fetch(proxyUrl, {
               signal: controller.signal,
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body)
           });
           clearTimeout(timeoutId);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) throw new Error(`HTTP ${response.status} from proxy`);
           const res = await response.json();
-          if (res.error) throw new Error(`RPC Error: ${res.error.message}`);
+          if (res.error) throw new Error(`RPC Error from proxy: ${res.error.message || JSON.stringify(res.error)}`);
           return res.result;
       } catch (e) {
-          solHttpRpcIndex = (solHttpRpcIndex + 1) % RPC_LIST.SOL.length;
-          console.warn(`Solana RPC ${rpcUrl} failed, switching to index ${solHttpRpcIndex}. Error: ${e.message}`);
+          console.error(`Solana proxy fetch failed: ${e.message}`);
+          // 프록시 호출 실패는 보통 심각한 문제이므로, 클라이언트에서 RPC 노드를 바꾸지 않습니다.
+          // 서버(api/solana.js)가 노드 로테이션을 담당합니다.
           throw e;
       }
   }
